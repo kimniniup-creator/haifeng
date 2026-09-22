@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Luma Reachy Bridge</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; background: #f4f6f8; color: #17202a; }
+    body { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    header { display: flex; justify-content: space-between; gap: 16px; align-items: center; border-bottom: 1px solid #ccd3da; padding-bottom: 16px; }
+    main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; margin-top: 20px; }
+    section { background: white; border: 1px solid #d6dce1; border-radius: 8px; padding: 18px; }
+    img { max-width: 100%; max-height: 420px; display: block; margin-top: 12px; }
+    textarea, input { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #aeb8c2; border-radius: 4px; margin: 8px 0; }
+    button { padding: 10px 14px; margin: 4px 4px 4px 0; cursor: pointer; }
+    #status { font-size: 0.9rem; color: #475569; }
+    #answer { min-height: 120px; white-space: pre-wrap; }
+    @media (max-width: 720px) { body { padding: 12px; } main { grid-template-columns: 1fr; } header { align-items: flex-start; flex-direction: column; } }
+  </style>
+</head>
+<body>
+  <header><div><h1>Luma / Reachy 交互桥接</h1><div id="status">等待配置</div></div><button id="connect">连接</button></header>
+  <main>
+    <section><h2>当前图片</h2><input id="token" type="password" placeholder="BRIDGE_TOKEN"><input id="session" placeholder="会话 ID，首次点击连接创建"><input id="file" type="file" accept="image/jpeg,image/png"><div><button id="upload">上传图片</button><button id="capture">拍照提问</button></div><img id="preview" alt="当前图片预览"><p id="meta"></p></section>
+    <section><h2>对话</h2><textarea id="text" rows="5" placeholder="输入问题，例如：我面前是什么？"></textarea><div><button id="send">发送文字</button><button id="stop">停止</button></div><div id="answer"></div><p id="request"></p></section>
+  </main>
+  <script>
+    const state = { imageId: null, sessionId: null, requestId: null };
+    const headers = () => ({ Authorization: `Bearer ${document.querySelector('#token').value}` });
+    const api = async (url, options = {}) => { options.headers = { ...headers(), ...(options.headers || {}) }; const response = await fetch(url, options); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.detail || '请求失败'); return data; };
+    const poll = async (id) => { state.requestId = id; for (let i = 0; i < 90; i++) { const data = await api(`/v1/requests/${id}`); document.querySelector('#request').textContent = `${data.status}${data.error_code ? `：${data.error_code}` : ''}`; if (data.answer_text) document.querySelector('#answer').textContent = data.answer_text; if (!['queued','capturing','media_ready','thinking','answer_ready','responding'].includes(data.status)) { if (data.image_id) { state.imageId = data.image_id; document.querySelector('#preview').src = `/v1/images/${data.image_id}`; } return data; } await new Promise(resolve => setTimeout(resolve, 500)); } throw new Error('请求超时'); };
+    document.querySelector('#connect').onclick = async () => { try { const data = await api('/v1/sessions', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}' }); state.sessionId = data.session_id; document.querySelector('#session').value = state.sessionId; const status = await api('/v1/status'); document.querySelector('#status').textContent = JSON.stringify(status); } catch (error) { document.querySelector('#status').textContent = error.message; } };
+    document.querySelector('#upload').onclick = async () => { try { const file = document.querySelector('#file').files[0]; if (!file) throw new Error('请选择图片'); const body = new FormData(); body.append('file', file); const data = await api(`/v1/images?session_id=${encodeURIComponent(state.sessionId)}&source=manual_upload`, { method: 'POST', body }); state.imageId = data.image_id; document.querySelector('#preview').src = `/v1/images/${data.image_id}`; document.querySelector('#meta').textContent = `${data.source} ${data.width}x${data.height}`; } catch (error) { document.querySelector('#meta').textContent = error.message; } };
+    document.querySelector('#capture').onclick = async () => { try { const data = await api('/v1/glasses/captures', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({session_id: state.sessionId, client_request_id: `capture_${Date.now()}`}) }); await poll(data.request_id); } catch (error) { document.querySelector('#request').textContent = error.message; } };
+    document.querySelector('#send').onclick = async () => { try { const data = await api('/v1/messages', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({session_id: state.sessionId, client_request_id: `message_${Date.now()}`, text: document.querySelector('#text').value, image_id: state.imageId}) }); await poll(data.request_id); } catch (error) { document.querySelector('#request').textContent = error.message; } };
+    document.querySelector('#stop').onclick = async () => { try { if (!state.requestId) throw new Error('当前没有进行中的请求'); const data = await api(`/v1/requests/${state.requestId}/cancel`, { method: 'POST' }); document.querySelector('#request').textContent = data.status; } catch (error) { document.querySelector('#request').textContent = error.message; } };
+  </script>
+</body>
+</html>
