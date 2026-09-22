@@ -1,0 +1,7 @@
+[submodule "upstream/luma-core"]
+	path = upstream/luma-core
+	url = https://github.com/metastable-lab/luma-core.git
+
+[submodule "upstream/reachy_mini"]
+	path = upstream/reachy_mini
+	url = https://github.com/pollen-robotics/reachy_mini.git
