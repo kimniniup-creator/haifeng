@@ -1,0 +1,89 @@
+diff --git a/src/client/ble.rs b/src/client/ble.rs
+index 31ccb7b..d63a458 100644
+--- a/src/client/ble.rs
++++ b/src/client/ble.rs
+@@ -225,28 +225,75 @@ impl Glasses {
+     pub async fn scan(timeout: Duration) -> Result<Vec<Discovered>, BleError> {
+         let adapter = Self::adapter().await?;
+         let service = uuid_from_u16(0xAA12);
++        // Some E06 firmware exposes AA12 after connection but omits it from advertisements.
++        // An explicit selector lets those units use an unfiltered scan without probing unrelated
++        // nearby peripherals. Glasses::connect still validates the required characteristics.
++        let selector = std::env::var("LUMA_DEVICE")
++            .ok()
++            .map(|value| value.trim().to_owned())
++            .filter(|value| !value.is_empty());
+         adapter
+             .start_scan(ScanFilter {
+-                services: vec![service],
++                services: if selector.is_some() {
++                    Vec::new()
++                } else {
++                    vec![service]
++                },
+             })
+             .await?;
+-        tokio::time::sleep(timeout).await;
+-        let peripherals = adapter.peripherals().await?;
++        let peripherals = if let Some(wanted) = selector.as_ref() {
++            let deadline = tokio::time::Instant::now() + timeout;
++            loop {
++                let mut matches = Vec::new();
++                for peripheral in adapter.peripherals().await? {
++                    let Some(props) = peripheral.properties().await? else {
++                        continue;
++                    };
++                    let id = peripheral.id().to_string();
++                    let name = props.local_name.or(props.advertisement_name);
++                    if id.eq_ignore_ascii_case(wanted)
++                        || name
++                            .as_deref()
++                            .is_some_and(|value| value.eq_ignore_ascii_case(wanted))
++                    {
++                        matches.push(peripheral);
++                    }
++                }
++                if !matches.is_empty() || tokio::time::Instant::now() >= deadline {
++                    break matches;
++                }
++                tokio::time::sleep(Duration::from_millis(250)).await;
++            }
++        } else {
++            tokio::time::sleep(timeout).await;
++            adapter.peripherals().await?
++        };
+         let _ = adapter.stop_scan().await;
+
+         let mut out = Vec::new();
+         for p in peripherals {
+             let props = p.properties().await?;
+             let Some(props) = props else { continue };
+-            if !props.services.contains(&service) {
++            let id = p.id().to_string();
++            let name = props
++                .local_name
++                .clone()
++                .or(props.advertisement_name.clone());
++            let matches = selector.as_ref().map_or_else(
++                || props.services.contains(&service),
++                |wanted| {
++                    id.eq_ignore_ascii_case(wanted)
++                        || name
++                            .as_deref()
++                            .is_some_and(|value| value.eq_ignore_ascii_case(wanted))
++                },
++            );
++            if !matches {
+                 continue;
+             }
+             out.push(Discovered {
+-                id: p.id().to_string(),
+-                name: props
+-                    .local_name
+-                    .clone()
+-                    .or(props.advertisement_name.clone()),
++                id,
++                name,
+                 rssi: props.rssi,
+                 peripheral: p,
+             });

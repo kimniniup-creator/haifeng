@@ -54,12 +54,15 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="Luma Reachy Bridge", version="0.1.0", lifespan=lifespan)
+APP_VERSION = "2.0.0"
+
+
+app = FastAPI(title="Luma Reachy Bridge", version=APP_VERSION, lifespan=lifespan)
 
 
 @app.get("/v1/health")
 async def health():
-    return {"status": "ok", "service": "luma-reachy-bridge"}
+    return {"status": "ok", "service": "luma-reachy-bridge", "version": APP_VERSION}
 
 
 @app.get("/v1/status", dependencies=[Depends(auth)])
