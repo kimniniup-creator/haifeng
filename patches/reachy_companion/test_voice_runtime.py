@@ -120,9 +120,10 @@ class InstallTests(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "Windows mutex")
     def test_second_process_cannot_acquire_audio(self):
-        runtime.acquire_single_instance()
-        runtime.acquire_single_instance()
-        result = subprocess.run([sys.executable, "-c", "import voice_runtime; voice_runtime.acquire_single_instance()"], cwd=Path(__file__).parent, capture_output=True)
+        name = "Local\\HaifengConversationTest" + str(os.getpid())
+        runtime.acquire_single_instance(name)
+        runtime.acquire_single_instance(name)
+        result = subprocess.run([sys.executable, "-c", "import sys,voice_runtime; voice_runtime.acquire_single_instance(sys.argv[1])", name], cwd=Path(__file__).parent, capture_output=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(b"already running", result.stderr)
 

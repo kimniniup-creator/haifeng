@@ -11,7 +11,7 @@ STALL_SECONDS = 3.0
 RETRY_SECONDS = 10.0
 
 
-def acquire_single_instance():
+def acquire_single_instance(name="Local\\HaifengConversationAudio"):
     """Hold a Windows session mutex until process exit, before opening audio."""
     global _mutex
     if os.name != "nt" or _mutex is not None:
@@ -20,7 +20,7 @@ def acquire_single_instance():
     kernel.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
     kernel.CreateMutexW.restype = ctypes.c_void_p
     kernel.CloseHandle.argtypes = [ctypes.c_void_p]
-    handle = kernel.CreateMutexW(None, False, "Local\\HaifengConversationAudio")
+    handle = kernel.CreateMutexW(None, False, name)
     error = ctypes.get_last_error()
     if not handle:
         raise OSError(error, "Cannot acquire conversation audio ownership")
