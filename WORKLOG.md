@@ -108,3 +108,5 @@
 
 ## 动作目录范围纠正
 - Agent owner回传Kim截图DANCES(34)。原85+19目录仅REST recorded dataset，不能称全机器人动作目录。已在目录顶部纠正并交动作owner核对34入口/ID/调用路径；尚未确认该界面是否使用Conversation App AVAILABLE_MOVES。
+
+- 34入口核对已完成并由总控复查源码/两库GET：20官方+14音乐，33项已枚举，headbanger_combo缺失；统一REST recorded路径。完整对照整合进REACHY_ACTION_CATALOG.md，未播放动作。

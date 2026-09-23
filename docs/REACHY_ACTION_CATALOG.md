@@ -1,6 +1,6 @@
 # Reachy 动作映射清单
 
-> 范围更正：本表仅覆盖 REST recorded dataset 的 85 个情绪与 19 个舞蹈资产，不是机器人全部动作入口。Kim 的界面显示 DANCES(34)；这 34 项的 ID 和执行路径正在由动作负责人核对。Conversation App 另有 Python AVAILABLE_MOVES → DanceQueueMove 执行路径，尚未确认是否就是该界面的来源。不要将下面 19 项视作那 34 项的完整替代。
+> 最新范围：初始清单为 85 个情绪与 19 个官方舞蹈资产。界面 DANCES(34) 已核实由 20 个官方舞蹈入口加 14 个音乐舞蹈入口组成，均走 REST recorded 路径；当前其中 33 项可枚举，headbanger_combo 缺失。完整界面对照见本文末节，不要将初始 19 项当作全部舞蹈入口。
 
 2026-09-23 从当前原生 daemon 的只读列表接口取得：85 个情绪资产、19 个舞蹈资产。接口可列出不等于已逐项实机验收；中文语义为映射候选，具体表现需预览确认。本轮未播放动作。
 
@@ -150,3 +150,52 @@
 - `stumble_and_recover`
 - `uh_huh_tilt`
 - `yeah_nod`
+
+
+## 界面 DANCES(34) 逐项对照（已核对）
+
+P = pollen-robotics/reachy-mini-dances-library；M = Anne-Charlotte/music。按界面从左到右、逐行排列。可枚举仅表示当前服务解析了动作名字，不代表完整轨迹有效、持续驻留或实机播放通过。
+
+| 序号 | 动作 ID | 数据集 | 当前服务列表 |
+|---|---|---|---|
+| 1 | stumble_and_recover | P | 已枚举 |
+| 2 | chin_lead | P | 已枚举 |
+| 3 | head_tilt_roll | P | 已枚举 |
+| 4 | jackson_square | P | 已枚举 |
+| 5 | pendulum_swing | P | 已枚举 |
+| 6 | side_glance_flick | P | 已枚举 |
+| 7 | grid_snap | P | 已枚举 |
+| 8 | simple_nod | P | 已枚举 |
+| 9 | side_to_side_sway | P | 已枚举 |
+| 10 | polyrhythm_combo | P | 已枚举 |
+| 11 | interwoven_spirals | P | 已枚举 |
+| 12 | uh_huh_tilt | P | 已枚举 |
+| 13 | chicken_peck | P | 已枚举 |
+| 14 | yeah_nod | P | 已枚举 |
+| 15 | headbanger_combo | P | 缺失，暂不可映射为可执行 |
+| 16 | side_peekaboo | P | 已枚举 |
+| 17 | dizzy_spin | P | 已枚举 |
+| 18 | neck_recoil | P | 已枚举 |
+| 19 | groovy_sway_and_roll | P | 已枚举 |
+| 20 | sharp_side_tilt | P | 已枚举 |
+| 21 | beyonce-single-ladies | M | 已枚举 |
+| 22 | demon-hunters-1 | M | 已枚举 |
+| 23 | eagles-hotel-california | M | 已枚举 |
+| 24 | eminem-lose-yourself | M | 已枚举 |
+| 25 | feel-the-magic-in-the-air | M | 已枚举 |
+| 26 | katy-perry-fireworks | M | 已枚举 |
+| 27 | las-ketchup | M | 已枚举 |
+| 28 | michael-jackson-thriller | M | 已枚举 |
+| 29 | paint-it-black | M | 已枚举 |
+| 30 | pharrell-williams-happy | M | 已枚举 |
+| 31 | queen-we-will-rock-you | M | 已枚举 |
+| 32 | spice-girls | M | 已枚举 |
+| 33 | the-fratellis-whistle-for-the-choir | M | 已枚举 |
+| 34 | the-white-stripes-seven-nation-army | M | 已枚举 |
+
+调用链：ExpressionsSection.handleAction → getDanceDataset → useRobotCommands.playRecordedMove → POST /api/move/play/recorded-move-dataset/{dataset}/{id} → native RecordedMoves.get → start_expression。34入口不是Conversation App的AVAILABLE_MOVES/DanceQueueMove路径。
+
+音乐库还返回两个未在该界面展示的ID：michael-jackson-thriller-official-video-shortene、queen-we-will-rock-you-official。两舞蹈数据集共35条，界面固定34入口，其中33条可枚举，headbanger_combo缺失。
+
+来源：本地官方桌面源码constants/choreographies.ts、ExpressionsSection.tsx、hooks/robot/useRobotCommands.ts；动作owner核对Kim的34入口截图；当前daemon两库GET列表。未发送实体动作。
+
