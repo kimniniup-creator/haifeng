@@ -69,3 +69,16 @@
 - 首次正常启动再次相机错误+电机全部失联，app error。停止/无唤醒重启daemon后释放媒体，安装严格哈希、可回滚voice-only适配；不启用相机/动作循环/语音摇头。软件仍可接受其他控制方动作，不能称硬件问题解决。
 - 第二次启动running；08:07:30 UTC HF实时session initialized，Vivian/haifeng。UI Hosted/Ready/Connected、麦克风开启，主页Listening/Ready；日志有音频增量，一次首段853ms。浏览器页面已保留给用户。询问实际中文可闻回复，尚待回答；不把音频数据当实体扬声器验证。
 - daemon真实running/ready/error=null/nb_error=0；先前动作精度失败仍未解决。未启用开机自启动。配置解析与Python语法检查通过，现有表情补丁仍保持安装。
+
+## 2026-09-23 接口地址 / 语音条件 / 情感映射专项
+- 交付物为 Word 记录，按用户指示直接提交到 upstream：timesbye/Robot_glasses，docs/Reachy_Mini_接口_语音_情感映射记录.docx，commit 63ae610，远端已核（49511 字节）。本地不另存副本。
+- **推翻既往结论（no_media）**：daemon 现为 no_media=false、media available=true、motors enabled、控制环 30–32Hz、nb_error=0、error=null。此前「REST 200 只是 no-op」的前提不再成立，音频与媒体项需按新环境重测，不得沿用旧判定。
+- **推翻既往结论（未装对话应用）**：官方 reachy_mini_conversation_app 正在 127.0.0.1:7860 运行（JSON-RPC ws://127.0.0.1:7860/rpc），HF 后端 connected，TTS 音色 9 个、当前 Vivian，人格 user_personalities/haifeng 为当前及开机默认。HANDOFF 里「未装对话应用」已作废。
+- 新增端口面：daemon 另在 0.0.0.0:8443（GStreamer WebRTC 信令）与 0.0.0.0:7860（对话应用）监听，非仅回环。旧 README 只约束 8000，需补防火墙约束。
+- 官方素材实测：情绪库 pollen-robotics/reachy-mini-emotions-library 85 个动作（84 个自带 .ogg，仅 waiting 无音，时长 2.14–19.76s）、舞蹈库 19 个，均已在本机 HF 缓存。
+- 实机实测：yes1 播放产生真实动作（右触角 0.2577 rad ≈14.8°，头部 z ±24mm）；laughing1 与其 .ogg 并发调用跑通，补丁自动复位残差 ≤0.025 rad / ≤2mm；全程 daemon error=null、nb_error=0。
+- 实测 POST /api/media/play_sound 固定阻塞 2.65–2.83s 且与音频长度无关（11.78s 的 curious1.ogg 同为 2.71s），是 GStreamer 建流开销；做 A/V 同步必须补偿。
+- **自身补丁两处缺陷（实测）**：(1) ReturningMove.__init__ 用 np.nextafter(move.duration,0) 求末态，而 duration=len(trajectory)*dt 可能略大于 timestamps[-1]，导致 confused1/displeased1/furious1/inquiring3/laughing2/proud1/proud3/tired1/welcoming1 共 9 个动作恒返回 500（welcoming1 duration=3.4600000000000004 > last_ts=3.46）；(2) ReturningMove.sound_path 写死 None，使 84 个情绪动作的配音全部不播。两处均为一行修法，已写入文档，未动手改——见下条。
+- **阻塞（最高优先级，推断未验证）**：C:\Users\12246\AppData\Local\Reachy Mini Control 目录已从磁盘消失，但 daemon(38256)/对话应用(39340)/helper(36616) 仍从该路径的内存镜像运行。Program Files 安装体仍在。推断重启客户端或电脑后该环境（含补丁）会丢失，需重走 bootstrap。因此本轮不关客户端、不重装补丁，先报告。
+- 仍待用户现场确认：扬声器可闻性。本轮已发 impatient1.wav / count.wav / wake_up.wav 及情绪配音，均 200；EOS/200 不是可闻证据。
+- 原始响应在 .runtime/：emotion-move-probe.json、emotion-move-probe2.json、emotion-move-validation.json、emotion-with-sound.json、guard-transition-math.json、conversation-app-rpc.json、conversation-app-tools.json（不进 Git）。

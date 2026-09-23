@@ -54,3 +54,14 @@ Luma没有现场发现；上游有E06-0055真机验证记录，本机未复验�
 - 官方Conversation App 1.0.1已运行，HF Hosted后台已连接；7860界面选Haifeng/Vivian，麦克风已开。UI标签Mute microphone是点击动作，不表示静音。
 - 本次首启仍触发相机/九电机错误，故临时采用patches/reachy_companion的voice-only适配，daemon媒体released=true，切勿随手acquire；目前真实daemon健康。仅官方客户端为8000唯一daemon。
 - 已有音频响应增量，实际中文听感待用户回复；不能称整机稳定。人格和可逆安装器已保存，详情README。无需新增API key，未设开机启动，官方更新可能覆盖适配。
+
+## 2026-09-23 最新状态（覆盖本文件前面所有音频/对话应用结论）
+- 交付：Word 记录已按用户指示提交到 upstream timesbye/Robot_glasses，docs/Reachy_Mini_接口_语音_情感映射记录.docx，commit 63ae610。本地不留副本。
+- **no_media=false**。daemon media available=true、motors enabled、error=null、nb_error=0、控制环 30–32Hz。前文「REST 200 是 no-op」「no_media 下播放不算数」已失效，音频判定必须按新环境重做。
+- **对话应用在运行**。官方 reachy_mini_conversation_app：http://127.0.0.1:7860，JSON-RPC ws://127.0.0.1:7860/rpc；HF 后端 connected；TTS 9 音色、当前 Vivian；人格 user_personalities/haifeng 为当前及开机默认。前文「当前未装对话应用」作废。
+- 端口面：8000 仅回环；**8443（WebRTC 信令）与 7860（对话应用）绑 0.0.0.0**，局域网可达，需补防火墙。8088 为项目桥接。
+- 情感映射挂载点已就位但未启用：对话应用内置 play_emotion / stop_emotion / dance / move_head / head_tracking / sweep_look / camera / go_to_sleep；海风人格 enabled_tools 目前仅 remember / forget / idle_do_nothing。人格提示词明写「当前硬件动作还在验收…不请求未提供的动作或摄像头工具」，要接动作必须同步改这句，否则模型会拒绝调用。未擅自改动用户设置。
+- 实机已验证：yes1 真实运动（右触角 0.2577 rad）、laughing1 动作+配音并发跑通、补丁复位残差 ≤0.025 rad。
+- **补丁两处缺陷待修（未动手）**：9 个情绪动作恒 500（nextafter 越界，含 confused1/laughing2/proud1/welcoming1）；ReturningMove.sound_path=None 使全部情绪配音不响。修法各一行，写在 Word 文档 6.2 / 6.3。
+- **最高优先级阻塞**：C:\Users\12246\AppData\Local\Reachy Mini Control 目录已从磁盘消失，daemon/对话应用/helper 仍在跑内存镜像。**重启客户端或电脑前先备份 apps_venv 包清单与人格文件**，否则很可能需要重走 bootstrap 且补丁丢失。本轮因此未关客户端、未重装补丁。
+- 唯一未闭环的验收项仍是扬声器现场可闻性，只能由现场的人确认。
