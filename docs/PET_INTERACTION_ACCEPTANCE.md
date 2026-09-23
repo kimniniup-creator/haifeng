@@ -148,3 +148,14 @@ python -m pytest tests/test_pet_interaction.py tests/test_pet_interaction_integr
 - 动作诊断文档保持实测偏差与hold未通过的结论，没有新增动作实现或放宽approved。仓库public表述与Kim已授权状态一致。
 
 **结论：该固定版本无已知软件合并阻断，可由集成负责人按已有授权合并。** 本次不证明真人wave/palm识别、物理运动或hold通过，不改变motion dry-run、映射/profile未批准、相机默认关闭的边界；未访问设备、生产API，未重启8091服务。
+
+## 持续视觉 PR #6 增量审查（2026-09-24）
+
+[PR #6](https://github.com/kimniniup-creator/haifeng/pull/6) 固定 `26466cd4e8ac8eeb5543dfa5298ca3f943febf7d`，base `43c68cce056403aa67c4553cd66f1fb7a05caf2a`。独立快照运行 `python -m pytest -q tests/test_pet_vision.py tests/test_qa_seconds.py tests/test_qa_continuous.py`：**57 passed，0 skipped，8.60秒**，包括31项仓库测试、22项既有独立时长检查、4项独立持续模式及日志检查。真实模型空白帧和随机测试名的Windows mutex实际执行；所有采集/投递均为mock，没有打开相机或访问后端。
+
+- 持续入口只接受DirectShow provider，拒绝同时指定seconds；无总时长timer但保留父30秒无完整帧进度监控，源20秒无读取进度监控。父watchdog仅清理其创建的子进程树；错误退出不自动重连。独立mock触发父stall回调，验证终止、报错、关闭管道和停止guard。
+- Windows命名mutex重复申请拒绝、释放后可重新申请通过；该锁覆盖采用本guard的DirectShow reader，不代表能约束任意外部相机软件或其他Windows会话。唯一producer仍由协调窗口和部署负责人管理。
+- 合成3000条事件实际触发1 MiB轮转，只有一个backup，两文件均低于1 MiB且逐行JSON有效；回执仅保留status/reason/decision_id，额外测试secret字段不落日志。测试未产生图片或真实凭据。
+- 源码审查确认读取失败立即退出、finally释放采集句柄与lease；原生卡死使用自身进程退出兜底。软件检查不等于真实长期运行、真人手势识别或实体动作通过。
+
+**结论：该固定版本无已知软件合并/已授权唯一producer部署阻断。** 交集成负责人合并、视觉owner在协调窗口部署；QA不部署、不操作设备、不重跑107项。motion dry-run及映射/profile未批准边界保持。owner报告的60秒实采264不同帧、66 accepted及backend状态转换仅作转达证据，不计入QA亲测。
