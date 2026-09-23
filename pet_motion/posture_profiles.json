@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "profiles": {
+    "look_up": {
+      "approved": false,
+      "axis": "local_y",
+      "delta_degrees": -1.5,
+      "leg_seconds": 1.5,
+      "peak_speed_degrees_per_second": 2.0,
+      "settle_seconds": 1.0,
+      "stable_seconds": 1.0,
+      "baseline_seconds": 120,
+      "note": "Negative local-Y pitch candidate; visible up direction and physical tracking await device acceptance. No automatic return."
+    }
+  }
+}

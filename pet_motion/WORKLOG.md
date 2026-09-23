@@ -80,3 +80,24 @@ FullState despite route flags, so tracking/offset hypotheses remain unproven.
 Later stationary reads show no large continuing drift. DIAGNOSIS.md records
 falsifiable hypotheses and read-only instrumentation prerequisites before any
 future device window. No motion or device-state changes during this analysis.
+
+## Explicit look_up implementation in progress
+
+Kim requested actual action mapping, starting with an independent look_up loop.
+First read of this new task found native daemon communication error before any
+motion was sent. The integration/link owner recovered the existing daemon without
+wake-up; it reports running with motors disabled. Native telemetry installation
+and any daemon maintenance belong exclusively to that owner under coordinator
+authorization; the motion owner remains frozen until handoff.
+
+Added telemetry.py (commit b1c8b7): pure read-only backend attributes, desired and
+actual joints/poses, effective target and speech offsets, stable-read timestamp;
+three fake/API tests passed. It does not install itself or launch a service.
+
+Added separate look_up/return_to_start posture path and editable profile, baseline
+ID custody (120s, explicit return, no angle accumulation), one-second verified
+holding, and measured-joint pinning rather than Cartesian re-IK on stop. Native
+SDK commands have no ack, so pin verification checks desired/actual joints and
+IK-disabled state. Profiles remain unapproved pending actual diagnostics, focused
+tests, independent QA and physical command/arrival/hold/stop/return acceptance.
+LOOK_UP.md is the cross-owner and second-host interface handoff.
