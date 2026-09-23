@@ -218,6 +218,18 @@ class MotionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.executor.wait(first.request_id)).status, "failed")
         self.assertEqual(self.executor.fault, "move_failed_during_stop")
 
+    async def test_stop_error_with_buffered_completion_does_not_fault(self):
+        async def already_completed(uuid):
+            await self.daemon.events.put((uuid, "move_completed"))
+            raise RuntimeError("daemon removed UUID before stop arrived")
+        self.daemon.stop = already_completed
+        first = await self.running()
+        await self.executor.cancel()
+        final = await self.executor.wait(first.request_id)
+        self.assertEqual(final.status, "cancelled")
+        self.assertTrue(self.executor.available)
+        self.assertEqual(self.executor.fault, "")
+
     async def test_cancelled_waiter_does_not_cancel_physical_request(self):
         first = await self.running()
         waiter = asyncio.create_task(self.executor.wait(first.request_id))

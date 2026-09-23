@@ -194,7 +194,13 @@ class MotionExecutor:
     async def _stop(self, session, uuid):
         try:
             async with asyncio.timeout(self.stop_timeout):
-                await session.stop(uuid)
+                try:
+                    await session.stop(uuid)
+                except Exception:
+                    # The daemon removes completed UUIDs before stop arrives
+                    # and may return HTTP 500. A buffered matching terminal
+                    # event is authoritative even when stop itself failed.
+                    pass
                 event = await session.wait(uuid)
                 if event not in {"move_cancelled", "move_completed"}:
                     self._trip("move_failed_during_stop")
