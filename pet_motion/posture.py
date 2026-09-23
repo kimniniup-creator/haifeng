@@ -74,14 +74,22 @@ async def run_posture(executor, result, deadline, admission_deadline, baseline_i
         if returning and (previous is None or baseline_id != previous.id):
             return replace(result, status="rejected", reason="baseline_missing_or_invalid")
         current = await read()
+        if np.max(np.abs(current["joints"]-current["target_joints"])) > .005:
+            executor._baseline = None
+            return replace(result, status="rejected", reason="existing_joint_target_not_reached")
         if previous is not None:
             if not matches(current, previous.held):
                 executor._baseline = None
                 return replace(result, status="rejected", reason="baseline_pose_changed")
             if not returning:
+                stable_until = time.monotonic()+profile["stable_seconds"]
+                while time.monotonic() < stable_until:
+                    await asyncio.sleep(.05)
+                    actual = await read()
+                    if not matches(actual, previous.held) or np.max(np.abs(actual["joints"]-actual["target_joints"])) > .005:
+                        executor._baseline = None
+                        return replace(result, status="rejected", reason="existing_hold_not_verified")
                 return replace(result, status="completed", reason="already_looking_up", baseline_id=previous.id)
-        if np.max(np.abs(current["joints"]-current["target_joints"])) > .005:
-            return replace(result, status="rejected", reason="existing_joint_target_not_reached")
         if not returning and executor._posture_seed is None:
             executor._posture_seed = Baseline("", current, current, time.monotonic()+profile["baseline_seconds"])
         origin = previous.origin if returning else executor._posture_seed.origin

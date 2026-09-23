@@ -195,14 +195,24 @@ class MotionExecutor:
                 if interrupted:
                     raise asyncio.CancelledError
             elif reason == "cancelled" and self._baseline is not None:
-                try:
-                    from .posture import diagnostic_pose
-                    async with asyncio.timeout(self.stop_timeout):
-                        async with self.transport.session() as session:
-                            await session.pin_current_joints()
-                            self._baseline.held = diagnostic_pose(await session.diagnostics())
-                except Exception:
-                    self._trip("posture_hold_unconfirmed")
+                async def hold():
+                    try:
+                        from .posture import diagnostic_pose
+                        async with asyncio.timeout(self.stop_timeout):
+                            async with self.transport.session() as session:
+                                await session.pin_current_joints()
+                                self._baseline.held = diagnostic_pose(await session.diagnostics())
+                    except Exception:
+                        self._trip("posture_hold_unconfirmed")
+                completion = asyncio.create_task(hold())
+                interrupted = False
+                while not completion.done():
+                    try:
+                        await asyncio.shield(completion)
+                    except asyncio.CancelledError:
+                        interrupted = True
+                if interrupted:
+                    raise asyncio.CancelledError
         finally:
             self._stopping = False
 
