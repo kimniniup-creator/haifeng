@@ -39,6 +39,49 @@
 任一步生命周期被系统拒绝，记录动作与原始拒绝原因并停止该步，保留已运行
 正式版本。代码可继续离线修改，不用反复重启试探。
 
+## 用户回来后的单次正常入口
+
+这段只供之后的正常人工维护窗口使用，**本轮没有执行**，也不是绕过先前
+自动审批拒绝的备用启动器。先由维护owner完成上述声音/后端的匹配部署，
+准备共享proactive凭据并核对官方media已释放。用户不用反复开关机器人。
+若前置检查失败，先处理提示的维护缺项，不反复启动相机。
+
+在 PowerShell 一次粘贴以下原有runner入口；不创建新服务或自动重连：
+
+```powershell
+Set-Location -LiteralPath 'D:\海风'
+$ErrorActionPreference = 'Stop'
+$smileTokens = Get-Content -LiteralPath '.runtime/pet-local-tokens.json' -Raw | ConvertFrom-Json
+$smileState = Invoke-RestMethod 'http://127.0.0.1:8091/v1/state' -Headers @{ Authorization = "Bearer $($smileTokens.operator)" } -TimeoutSec 3
+if ($smileState.proactive_connected -ne $true -or $smileState.voice_connected -ne $true -or $smileState.stopped -or $smileState.closed) {
+    throw '声音/后端的主动回应连接尚未就绪；先由维护owner处理，不启动相机。'
+}
+$smileModel = '.runtime/models/face_landmarker.task'
+if ((Get-FileHash -LiteralPath $smileModel -Algorithm SHA256).Hash.ToLowerInvariant() -ne '64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff') {
+    throw '人脸模型校验失败；不启动相机。'
+}
+$smileExisting = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'python' -and $_.CommandLine -match 'run_pet_vision.py|run_pet_vision_camera.py' })
+if ($smileExisting.Count) { throw '已有视觉reader；先由维护owner确认唯一实例，不重复启动。' }
+$smilePreviousToken = $env:PET_VISION_TOKEN
+try {
+    $env:PET_VISION_TOKEN = $smileTokens.vision
+    & '.\.runtime\vision-env\Scripts\python.exe' tools/run_pet_vision.py --mode face --provider pet_vision.ipc:leased_opencv_frames --continuous --send --model $smileModel --event-log .runtime/face-events.ndjson
+} finally {
+    $env:PET_VISION_TOKEN = $smilePreviousToken
+}
+```
+
+启动后由维护owner核对一个producer/reader子树、fresh frame、face_presence或
+visual_unknown得到后端回执；用户稳定笑一次、保持笑、回中性后等冷却再笑，
+观察happy声音只在有效事件时出现。再试说话打断和退出后不补播。
+事件/decision/声音终态与人耳听感都要核对；没有观测笑脸不能报告通过。
+
+2026-09-24准备核验：正式vision-env依赖import通过；同一官方人脸模型已复制到
+上述ignored路径，3758596字节/hash匹配；正式环境实际构造、空白图推理和close
+成功，blank faces=0/quality=false，没有打开camera。默认pet-env原先缺失，已按
+requirements-pet.txt准备并做仅import检查，未启动后端。现有旧声音/后端服务
+仍未换版；唯一已发生的执行拒绝仍是视觉producer启动。更高分辨率研究不是前置。
+
 ## 与声音链并行、但尚未部署的动作维护候选
 
 - 旧8088硬件门禁 `a52236e`：独立24+3通过；当前旧PID未替换，不能声称已禁用。
