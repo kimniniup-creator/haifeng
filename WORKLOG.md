@@ -105,3 +105,6 @@
 ## 动作映射入口与清单
 - 按Kim要求拆分可见动作/语音任务，现有Agent任务保持决策与记忆owner；登记PROJECT_CONTROL。
 - 当前daemon只读列表成功返回85情绪和19舞蹈，完整ID及首批候选对应落在docs/REACHY_ACTION_CATALOG.md。本轮未触发动作。
+
+## 动作目录范围纠正
+- Agent owner回传Kim截图DANCES(34)。原85+19目录仅REST recorded dataset，不能称全机器人动作目录。已在目录顶部纠正并交动作owner核对34入口/ID/调用路径；尚未确认该界面是否使用Conversation App AVAILABLE_MOVES。
