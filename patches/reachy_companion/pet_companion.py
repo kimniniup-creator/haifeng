@@ -119,10 +119,18 @@ class Companion:
                 except Exception: pass
         self.input_stream = self.output_stream = None
 
+    def forget_client(self, client):
+        self.clients.discard(client)
+        self.agent_clients.discard(client)
+        self.state["semantic_agent_connected"] = bool(self.agent_clients)
+
     async def emit(self, event):
         for client in list(self.clients):
             try: await asyncio.wait_for(client.send_json(event), .1)
-            except Exception: self.clients.discard(client)
+            except Exception:
+                self.forget_client(client)
+                try: await asyncio.wait_for(client.close(code=1011), .1)
+                except Exception: pass
 
     def interrupt(self, reason="interrupt"):
         identity = self.gate.advance(reason)
@@ -318,9 +326,7 @@ def create_app(pet):
                     pet.state["semantic_agent_connected"] = True
         except WebSocketDisconnect: pass
         finally:
-            pet.clients.discard(ws)
-            pet.agent_clients.discard(ws)
-            pet.state["semantic_agent_connected"] = bool(pet.agent_clients)
+            pet.forget_client(ws)
     return app
 
 

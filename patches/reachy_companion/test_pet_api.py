@@ -1,3 +1,4 @@
+import asyncio
 import time
 import unittest
 from fastapi.testclient import TestClient
@@ -47,6 +48,36 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.client.post("/api/mute", json={"muted":"false"}).status_code, 400)
         self.assertTrue(self.client.post("/api/mute", json={"muted":True}).json()["muted"])
         self.assertIsNone(self.pet.gate.pending)
+
+
+class SubscriptionTests(unittest.IsolatedAsyncioTestCase):
+    async def check_failed_send(self, timeout=False, survivor=False):
+        class Socket:
+            closed = False
+            async def send_json(self, event):
+                if timeout: await asyncio.sleep(10)
+                raise ConnectionError("failed transport")
+            async def close(self, code): self.closed = True
+        pet = Companion("unused")
+        failed = Socket()
+        pet.clients.add(failed)
+        pet.agent_clients.add(failed)
+        if survivor: pet.agent_clients.add(object())
+        pet.state["semantic_agent_connected"] = True
+        await pet.emit({"type": "turn_input"})
+        self.assertNotIn(failed, pet.clients)
+        self.assertNotIn(failed, pet.agent_clients)
+        self.assertEqual(pet.state["semantic_agent_connected"], survivor)
+        self.assertTrue(failed.closed)
+
+    async def test_send_failure_restores_local_ack_eligibility(self):
+        await self.check_failed_send()
+
+    async def test_send_timeout_restores_local_ack_eligibility(self):
+        await self.check_failed_send(timeout=True)
+
+    async def test_failed_subscriber_does_not_disconnect_survivor(self):
+        await self.check_failed_send(survivor=True)
 
 
 if __name__ == "__main__": unittest.main()

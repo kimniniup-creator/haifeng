@@ -120,3 +120,6 @@
 - Session/turn/epoch/input identity is checked at inference completion, output enqueue and audio callback; one final/response per turn, TTL, stale/duplicate rejection. Agent WS subscribe disables local acknowledgment; semantic backend integration remains separate.
 - Focused 26 tests and repository 19 tests passed. Desktop/mobile visual and control QA passed. Synthetic Mandarin ASR 453–609 ms; one speaker endpoint loopback interruption tail 47 ms. This is not a claim of physical audibility or full conversational acceptance.
 - Runtime environment and models are ignored in D:\海风\.runtime. Local UI http://127.0.0.1:7860/. Run/rollback/contract documented in patches/reachy_companion/README.md. Raw audio/private memories not committed.
+
+### Voice transport recovery follow-up — 2026-09-24
+Independent QA found that a failed WebSocket send removed only the event client, leaving its Agent subscription active and disabling the local acknowledgment indefinitely. Unified cleanup now removes both identities, updates connected state and closes the failed socket with a bounded timeout. Added send-failure, send-timeout and remaining-subscriber regressions: all 29 focused tests pass without opening hardware. Runtime restart is coordinated with the owner because audio testing window has already been returned.
