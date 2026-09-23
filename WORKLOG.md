@@ -101,3 +101,7 @@
 - installer 改为原子替换，避免修改 uv 共享硬链接；新增显式 site 和确切旧补丁恢复。12 项 guard 测试和 1 项硬链接回归通过。
 - 系统 Python 防火墙弹窗暂阻 UI 验收，已请用户处理；未发送动作，未修改防火墙。
 - 22:52 最终原生 UI 验收：防火墙提示已消失，官方客户端主界面 Ready，摄像头有画面；daemon 持续 running/error=null/nb_error=0。启动崩溃修复验收通过；动作模式未验收。旧对话 app 的两组父子进程仍存在，7860 唯一监听 PID 39340，本轮未中断其会话。
+
+## 动作映射入口与清单
+- 按Kim要求拆分可见动作/语音任务，现有Agent任务保持决策与记忆owner；登记PROJECT_CONTROL。
+- 当前daemon只读列表成功返回85情绪和19舞蹈，完整ID及首批候选对应落在docs/REACHY_ACTION_CATALOG.md。本轮未触发动作。
