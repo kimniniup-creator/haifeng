@@ -100,3 +100,15 @@
 发现自动集成TTL冲突：该微动作默认最低完整预算6.75秒，语音事件最多2.5秒、视觉1.5秒直接传给submit会拒绝。总控已明确后续契约为保留原事件start deadline，另设execution_budget=10秒；旧事件不得刷新时间，新epoch/stop仍中断。须在后续固定版本验证三项：新鲜短TTL事件可在期限内开始并完成去回；排队过期事件不开始；开始后stop/epoch仍取消且不补回程。本版本未据此放行自动链路。
 
 动作owner后续报告第一次探测在snapshot矩阵校验阶段中止，没有goto/UUID。原始遥测的正交误差约6e-4，高于旧1e-4阈值；这不是动作到位失败，也不是微动作通过。矩阵容差及受限SO(3)投影将随新固定提交独立复验，QA不自行重试设备。
+
+姿态修正 `03a24f9026f85807922505eebcb9b9000b359fd3` 独立 **39 passed**。先约束原始正交及det误差≤.001，再SVD投影；投影差≤.001且det正，保留原平移且不改输入，scale/shear/reflection/坏末行拒绝。未发现阻断总控条件授权的第二次同样1.5度、10秒TTL、唯一一次受限探测的软件问题；TTL分离不在本版本，自动映射仍不放行。
+
+## 集成 PR #4 审查
+
+[PR #4](https://github.com/kimniniup-creator/haifeng/pull/4) 固定 `a155a33b55fbc07ed93fc67bac76b91103ebb75c`，独立运行 `tests/test_pet_interaction.py tests/test_pet_interaction_process.py tests/test_pet_interaction_integration.py`：**38 passed**。QA桥接环境新增sherpa-onnx 1.13.8供ASGI组合导入，实际执行语音owner HTTP→规则→机械PCM内存块→打断→旧结果拒绝，不skip，不播放。视觉真实GestureEngine→真实dry-run MotionExecutor的组合用例通过；true presence续租不重复动作、断流unknown已覆盖。
+
+另新建干净Python3.12.13环境，只安装该版本requirements-pet.txt和pytest9.1.1：22包兼容性检查通过，单元及process组 **35 passed**，证明独立fake后端按自身依赖可重建。不会把加过ASR/视觉依赖的环境当作这个干净环境证据。
+
+额外发现 **P2 false presence租约不过期**：最后一次present=False把presence_until置0，tick只检查truthy present；10秒后仍not_visible，不转unknown。已交集成owner修true/false统一期限并补回归；本版本暂不给最终可合结论。生产动作继续dry-run，摄像头runner不开；最终TTL改动仍须增量验收。
+
+启动脚本 `tools/run_pet_interaction.ps1` 静态审查不启动daemon/音频进程，显式开关控制设备/运动/语音订阅；令牌落在忽略目录、不在命令行回显。在线8091/7860状态均为owner报告，QA不访问或重启生产实例。
