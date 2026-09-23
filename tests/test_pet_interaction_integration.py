@@ -92,3 +92,43 @@ def test_presence_refresh_does_not_repeat_motion_and_stall_is_unknown():
         assert pet.present is None  # Missing input is unknown, not observed absence.
         await pet.close()
     asyncio.run(scenario())
+
+
+def test_no_hand_lease_also_expires_to_unknown():
+    async def scenario():
+        now=[time.time()]; pet=PetController(clock=lambda:now[0])
+        packet={"schema_version":1,"source":"vision","session_id":"camera","event_id":"none",
+            "kind":"presence","observed_at":now[0],"ttl_seconds":1.5,"confidence":1,"payload":{"present":False,"basis":"hand"}}
+        await pet.handle(packet)
+        assert pet.snapshot()["hand_visibility"] == "not_visible"
+        now[0]+=2; await pet.tick()
+        assert pet.snapshot()["hand_visibility"] == "unknown"
+        await pet.close()
+    asyncio.run(scenario())
+
+
+def test_queued_voice_state_and_late_receipt_do_not_override_new_turn():
+    from pet_interaction.adapters import FakeVoice
+    class QueueVoice(FakeVoice):
+        async def respond(self,payload):
+            self.calls.append(payload)
+            return {"status":"queued"}
+    async def scenario():
+        now=[time.time()]; pet=PetController(clock=lambda:now[0],voice=QueueVoice())
+        await pet.voice_turn("voice1",1,1,input_id="i1")
+        from pet_interaction.voice_link import consume_voice
+        result=await consume_voice(pet,{"type":"turn_input","session_id":"voice1","epoch":1,"turn_id":1,"input_id":"i1","phase":"final","text":"你好","observed_at":now[0]})
+        await pet.drain()
+        assert pet.state == "responding"
+        no_hand={"schema_version":1,"source":"vision","session_id":"camera","event_id":"none",
+            "kind":"presence","observed_at":now[0],"ttl_seconds":1.5,"confidence":1,"payload":{"present":False}}
+        await pet.handle(no_hand)
+        assert pet.state == "responding"
+        await pet.voice_turn("voice1",2,2,input_id="i2")
+        late={"type":"output_status","session_id":"voice1","epoch":1,"turn_id":1,"input_id":"i1",
+              "response_id":result["decision_id"],"status":"completed","reason":"last_buffer_submitted"}
+        await consume_voice(pet,late)
+        assert pet.state == "attention"
+        assert pet.decisions[result["decision_id"]]["status"] == "interrupted"
+        await pet.close()
+    asyncio.run(scenario())

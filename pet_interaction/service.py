@@ -110,4 +110,14 @@ def create_app(controller=None, tokens=None, voice_url=None):
             "event_id": uuid.uuid4().hex, "kind": "stop", "observed_at": controller.clock(),
             "ttl_seconds": 5, "confidence": 1, "payload": {}})
 
+    @app.post("/v1/shutdown")
+    async def shutdown(request: Request):
+        if role(request) != "operator":
+            raise HTTPException(403, "operator_required")
+        stop_server = getattr(app.state, "stop_server", None)
+        if stop_server is None:
+            raise HTTPException(409, "not_managed_by_cli")
+        stop_server()
+        return {"status": "shutdown_requested", "scope": "this_pet_service_only"}
+
     return app

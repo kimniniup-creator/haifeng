@@ -23,12 +23,7 @@ async def consume_voice(controller, message):
             "observed_at": observed, "ttl_seconds": min(2.5, message.get("ttl_seconds", 2.5)),
             "confidence": message.get("confidence", 1.0), "payload": {"text": text}})
     if kind == "output_status":
-        response_id = message.get("response_id")
-        decision = controller.decisions.get(response_id)
-        if decision:
-            # Diagnostic receipt only. Never resurrect behaviour on a late completion.
-            decision["voice_receipt"] = {k: message[k] for k in ("status", "reason") if k in message}
-        return {"status": "observed"}
+        return await controller.voice_receipt(message)
     return {"status": "ignored"}
 
 

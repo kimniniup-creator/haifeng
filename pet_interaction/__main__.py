@@ -40,7 +40,9 @@ def serve(args, parser):
         listener.bind(("127.0.0.1", args.port))
         listener.listen(128)
         import uvicorn
-        uvicorn.Server(uvicorn.Config(app, log_level="info", access_log=False)).run(sockets=[listener])
+        server = uvicorn.Server(uvicorn.Config(app, log_level="info", access_log=False))
+        app.state.stop_server = lambda: setattr(server, "should_exit", True)
+        server.run(sockets=[listener])
     finally:
         listener.close()
 

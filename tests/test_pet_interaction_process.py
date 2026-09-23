@@ -54,8 +54,13 @@ def test_fake_process_round_trip_and_duplicate_instance_rejection(tmp_path):
             stop = client.post("/v1/stop", headers={"Authorization":"Bearer "+env["PET_API_TOKEN"]}).json()
             assert stop["reason"] == "stop"
             assert client.get("/v1/state", headers=headers).json()["stopped"] is True
+            reply=client.post("/v1/shutdown",headers={"Authorization":"Bearer "+env["PET_API_TOKEN"]}).json()
+            assert reply["scope"] == "this_pet_service_only"
+            process.wait(timeout=10)
+            assert process.returncode == 0
     finally:
-        process.terminate()
+        if process.poll() is None:
+            process.terminate()
         process.wait(timeout=10)
 
 

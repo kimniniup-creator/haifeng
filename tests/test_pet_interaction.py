@@ -308,3 +308,33 @@ def test_stop_fault_is_visible_and_capacity_cannot_block_stop():
         assert pet.snapshot()["last_stop"]["voice"]["status"] == "dry_run"
         await pet.close()
     run(scenario())
+
+
+def test_voice_stop_failure_does_not_hide_motion_receipt():
+    class BadVoice(FakeVoice):
+        async def interrupt(self): raise ConnectionError("unavailable")
+    async def scenario():
+        clock=Clock(); pet=PetController(clock=clock,voice=BadVoice())
+        reply=await pet.handle(event(clock,"stop",source="operator"))
+        assert reply["reason"] == "stop_unconfirmed"
+        assert reply["outputs"]["motion"]["status"] == "dry_run"
+        assert reply["outputs"]["voice"]["status"] == "failed"
+        await pet.close()
+    run(scenario())
+
+
+def test_rest_survives_duplicate_speech_start_until_explicit_wake():
+    async def scenario():
+        clock=Clock(); pet=PetController(clock=clock)
+        await pet.handle(event(clock,"rest",source="operator"))
+        await pet.voice_turn("voice1",1,1)
+        await pet.voice_turn("voice1",1,1)  # owner's turn_changed then speech_started
+        assert pet.state == "resting"
+        assert (await pet.handle(speech(clock)))["reason"] == "stopped"
+        await pet.voice_turn("voice1",2,2)
+        packet=speech(clock,event_id="woke"); packet.update(epoch=2,turn_id=2,input_id="input2",payload={"text":"醒醒"})
+        assert (await pet.handle(packet))["status"] == "accepted"
+        await pet.drain()
+        assert not pet.rest_requested
+        await pet.close()
+    run(scenario())

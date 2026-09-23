@@ -41,6 +41,7 @@ class PetController:
         self.cooldowns = {}
         self.decisions = OrderedDict()
         self.active_id = None
+        self.output_id = None
         self.active_priority = -1
         self.active_task = None
         self.tasks = set()
@@ -70,7 +71,10 @@ class PetController:
             self.active_task.cancel()
         if self.active_id and self.active_id in self.decisions:
             self.decisions[self.active_id]["status"] = "interrupted"
+        if self.output_id and self.output_id in self.decisions:
+            self.decisions[self.output_id]["status"] = "interrupted"
         self.active_id = None
+        self.output_id = None
         self.active_priority = -1
 
     async def voice_turn(self, session_id, epoch, turn_id, reason="speech_started", input_id=None):
@@ -185,9 +189,9 @@ class PetController:
         if event.kind == "presence":
             was_present = self.present
             self.present = event.payload["present"]
-            self.presence_until = event.expires_at if self.present else 0
+            self.presence_until = event.expires_at
             if not self.present:
-                if self.active_priority <= PRIORITY["wave"]:
+                if self.active_priority <= PRIORITY["wave"] and not self.output_id and now >= self.voice_busy_until:
                     self._invalidate()
                     await self.motion.cancel()
                     if self.state != "resting":
@@ -219,6 +223,7 @@ class PetController:
         decision_id = uuid.uuid4().hex
         decision = {"decision_id": decision_id, "event_id": event.event_id, "source": event.source,
                     "session_id": event.session_id, "semantic_id": semantic, "sound_semantic": sound,
+                    "turn_id": event.turn_id, "epoch": event.epoch, "input_id": event.input_id,
                     "status": "scheduled", "expires_at": event.expires_at,
                     "understanding": "unrecognized" if intent == "unknown" else "local_rule", "intent": intent}
         self.decisions[decision_id] = decision
@@ -250,6 +255,7 @@ class PetController:
                 self.state = "responding"
             # Voice service performs its own final identity/expiry checks, including during playback.
             if event.source == "voice" and self._live(event, decision):
+                self.output_id = decision["decision_id"]
                 decision["voice"] = await self.voice.respond({"version": 1, "schema_version": 1,
                     "session_id": event.session_id, "turn_id": event.turn_id, "epoch": event.epoch,
                     "input_id": event.input_id, "response_id": decision["decision_id"],
@@ -268,7 +274,9 @@ class PetController:
                 decision["status"] = "failed" if any(s in {"failed", "rejected", "expired", "stale", "disconnected"} for s in statuses) else "dispatched"
                 # 'dispatched' includes dry_run/queued, never claims physically completed.
                 self.active_id, self.active_priority = None, -1
-                self.state = "attention" if self.present else "quiet"
+                waiting = decision.get("voice", {}).get("status") == "queued" and decision.get("voice_receipt", {}).get("status") not in {"completed", "interrupted", "dropped"}
+                self.output_id = decision["decision_id"] if waiting else None
+                self.state = "responding" if waiting else ("attention" if self.present else "quiet")
         except asyncio.CancelledError:
             decision["status"] = "interrupted"
         except Exception as exc:
@@ -276,6 +284,7 @@ class PetController:
             async with self.lock:
                 if self.active_id == decision["decision_id"]:
                     self.active_id, self.active_priority = None, -1
+                    self.output_id = None
                     self.state = "quiet"
                     await self.motion.cancel()
         finally:
@@ -290,13 +299,38 @@ class PetController:
     async def tick(self):
         """Expire observation state; deliberately no autonomous idle movement."""
         async with self.lock:
-            if self.present and self.clock() >= self.presence_until:
+            if self.output_id:
+                decision = self.decisions.get(self.output_id)
+                if decision is None or self.clock() >= decision["expires_at"]:
+                    if decision:
+                        decision["voice_receipt"] = {"status": "dropped", "reason": "receipt_deadline_expired"}
+                    self.output_id = None
+                    self.state = "resting" if self.rest_requested else ("attention" if self.present else "quiet")
+            if self.present is not None and self.clock() >= self.presence_until:
                 self.present = None
-                if self.active_priority <= PRIORITY["wave"]:
+                if self.active_priority <= PRIORITY["wave"] and not self.output_id and self.clock() >= self.voice_busy_until:
                     self._invalidate()
                     await self.motion.cancel()
                     if self.state != "resting":
                         self.state = "quiet"
+
+    async def voice_receipt(self, message):
+        async with self.lock:
+            response_id = message.get("response_id")
+            decision = self.decisions.get(response_id)
+            if not decision or any(message.get(k) != decision[k] for k in ("session_id", "epoch", "turn_id", "input_id")):
+                return {"status": "ignored", "reason": "unbound_receipt"}
+            status = message.get("status")
+            if status not in {"queued", "started", "completed", "interrupted", "dropped"}:
+                return {"status": "ignored", "reason": "invalid_receipt"}
+            prior = decision.get("voice_receipt", {}).get("status")
+            if prior in {"completed", "interrupted", "dropped"} or (prior == "started" and status == "queued"):
+                return {"status": "ignored", "reason": "old_receipt"}
+            decision["voice_receipt"] = {k: message[k] for k in ("status", "reason") if k in message}
+            if self.output_id == response_id and status in {"completed", "interrupted", "dropped"}:
+                self.output_id = None
+                self.state = "resting" if self.rest_requested else ("attention" if self.present else "quiet")
+            return {"status": "observed"}
 
     async def close(self):
         async with self.lock:
