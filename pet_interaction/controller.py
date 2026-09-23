@@ -8,6 +8,7 @@ from collections import OrderedDict
 
 from .adapters import FakeMotion, FakeVoice, as_result
 from .events import Event, InvalidEvent, identifier, turn_identifier
+from .policy import RulePolicy
 
 
 PRIORITY = {"presence": 10, "wave": 30, "wake_word": 60, "wake": 60, "speech_final": 70,
@@ -21,6 +22,7 @@ class PetController:
         self.motion = motion or FakeMotion()
         self.voice = voice or FakeVoice()
         self.clock, self.capacity = clock, capacity
+        self.policy = RulePolicy()
         self.started_at = clock()
         self.state, self.present = "quiet", False
         self.voice_context = None
@@ -31,6 +33,7 @@ class PetController:
         self.presence_until = 0.0
         self.stopped = False
         self.closed = False
+        self.last_stop = None
         self.seen = OrderedDict()
         self.highwater = {}
         self.cooldowns = {}
@@ -45,7 +48,19 @@ class PetController:
         return {"state": self.state, "present": self.present, "stopped": self.stopped,
                 "voice_connected": self.voice_connected, "voice_context": self.voice_context,
                 "active_decision_id": self.active_id, "closed": self.closed,
-                "devices": "adapter_controlled", "display_name": "啾啾"}
+                "devices": "adapter_controlled", "display_name": "啾啾",
+                "motion_fault": getattr(self.motion, "fault", ""), "last_stop": self.last_stop}
+
+    async def _stop_outputs(self):
+        # Stop both owners concurrently, never wait for physical motion before muting.
+        motion, voice = await asyncio.gather(self.motion.cancel(), self.voice.interrupt(), return_exceptions=True)
+        fault = getattr(self.motion, "fault", "")
+        motion_receipt = {"status": "failed", "reason": type(motion).__name__ if isinstance(motion, Exception) else fault} if isinstance(motion, Exception) or fault else {
+            "status": "dry_run" if isinstance(self.motion, FakeMotion) or getattr(self.motion, "dry_run", False) else "cancel_returned",
+            "physical_verified": False}
+        voice_receipt = {"status": "failed", "reason": type(voice).__name__} if isinstance(voice, Exception) else voice
+        self.last_stop = {"motion": motion_receipt, "voice": voice_receipt}
+        return self.last_stop
 
     def _invalidate(self):
         if self.active_task and not self.active_task.done():
@@ -89,8 +104,9 @@ class PetController:
             self.voice_final = None
             self.voice_connected = True
             self.voice_busy_until = self.clock() + (30 if reason == "speech_started" else 0)
-            self.stopped = reason in {"interrupt", "stop", "manual_preview", "audition", "muted", "mute", "overflow"}
-            self.state = "quiet" if self.stopped or reason == "snapshot" else "attention"
+            resting = self.state == "resting"
+            self.stopped = resting or reason in {"interrupt", "stop", "manual_preview", "audition", "muted", "mute", "overflow"}
+            self.state = "resting" if resting else ("quiet" if self.stopped or reason == "snapshot" else "attention")
             await self.motion.cancel()
             return {"status": "accepted"}
 
@@ -150,20 +166,17 @@ class PetController:
             return {"status": "suppressed", "reason": "out_of_order"}
         self.highwater = {k: v for k, v in self.highwater.items() if v[1] > now}
         self.highwater[order_key] = (event.observed_at, event.expires_at)
-        text = event.payload.get("text", "").strip().strip("。！？!?，, ")
-        is_stop = event.kind in {"stop", "palm_stop"} or (event.kind == "speech_final" and text in {"停", "停止", "停下", "别动", "不要动", "安静", "停一下", "停一下不要再说了", "不要再说了"})
-        is_rest = event.kind == "rest" or (event.kind == "speech_final" and text in {"休息", "睡觉", "去睡吧", "休息一下"})
+        intent, voice_motion, sound = self.policy.classify(event.payload.get("text", "")) if event.source == "voice" else (event.kind, "attention", None)
+        is_stop = event.kind in {"stop", "palm_stop"} or intent in {"stop", "quiet"}
+        is_rest = event.kind == "rest" or intent == "rest"
         if is_stop or is_rest:
             self._invalidate()
             self.stopped = True
             self.state = "resting" if is_rest else "quiet"
-            await self.motion.cancel()
-            try:
-                await self.voice.interrupt()
-                reason = "rest" if is_rest else "stop"
-            except Exception:
-                reason = "voice_stop_unconfirmed"
-            return {"status": "accepted", "reason": reason, "state": self.state}
+            outputs = await self._stop_outputs()
+            unconfirmed = any(r.get("status") == "failed" for r in outputs.values())
+            return {"status": "accepted", "reason": "stop_unconfirmed" if unconfirmed else ("rest" if is_rest else "stop"),
+                    "state": self.state, "outputs": outputs}
         if event.kind == "presence":
             self.present = event.payload["present"]
             self.presence_until = event.expires_at if self.present else 0
@@ -174,9 +187,10 @@ class PetController:
                     if self.state != "resting":
                         self.state = "quiet"
                 return {"status": "accepted", "reason": "presence_cleared", "state": self.state}
-        if self.stopped and event.kind not in {"wake", "wake_word"}:
+        wake = event.kind == "wake" or intent == "wake"
+        if self.stopped and not wake:
             return {"status": "suppressed", "reason": "stopped"}
-        if event.kind in {"wake", "wake_word"}:
+        if wake:
             self.stopped = False
         if event.source == "vision" and now < self.voice_busy_until:
             return {"status": "suppressed", "reason": "voice_priority"}
@@ -191,16 +205,13 @@ class PetController:
         if event.source == "voice":
             self.voice_busy_until = event.expires_at
         semantic = {"presence": "attention", "wave": "greeting", "wake": "attention", "wake_word": "attention"}.get(event.kind, "acknowledge")
-        sound = "ack"
-        if text in {"你好", "啾啾你好", "谢谢", "谢谢你"}:
-            semantic, sound = "greeting", "happy"
-        elif text in {"啾啾", "啾啾在吗"}:
-            semantic, sound = "attention", "curious"
+        if event.source == "voice":
+            semantic = voice_motion
         decision_id = uuid.uuid4().hex
         decision = {"decision_id": decision_id, "event_id": event.event_id, "source": event.source,
                     "session_id": event.session_id, "semantic_id": semantic, "sound_semantic": sound,
                     "status": "scheduled", "expires_at": event.expires_at,
-                    "understanding": "local_rule" if text in {"你好", "啾啾你好", "谢谢", "谢谢你", "啾啾", "啾啾在吗"} else "receipt_only"}
+                    "understanding": "unrecognized" if intent == "unknown" else "local_rule", "intent": intent}
         self.decisions[decision_id] = decision
         while len(self.decisions) > self.capacity:
             self.decisions.popitem(last=False)
@@ -257,6 +268,7 @@ class PetController:
                 if self.active_id == decision["decision_id"]:
                     self.active_id, self.active_priority = None, -1
                     self.state = "quiet"
+                    await self.motion.cancel()
         finally:
             if self.active_id == decision["decision_id"] and decision["status"] in {"dropped", "interrupted"}:
                 self.active_id, self.active_priority = None, -1

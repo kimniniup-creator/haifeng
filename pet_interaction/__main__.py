@@ -8,8 +8,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8091)
     parser.add_argument("--enable-devices", action="store_true")
+    parser.add_argument("--enable-motion", action="store_true", help="also enable owner-approved physical motion")
     parser.add_argument("--voice-url", help="explicit loopback voice-owner endpoint; subscribes as pet-agent")
     args = parser.parse_args()
+    if args.enable_motion and not args.enable_devices:
+        parser.error("--enable-motion also requires --enable-devices")
+    from .lease import ProcessLease
+    with ProcessLease():
+        serve(args, parser)
+
+
+def serve(args, parser):
     from .adapters import FakeMotion, FakeVoice, HttpVoice
     from .controller import PetController
     from .service import create_app
@@ -18,7 +27,7 @@ def main():
     motion, voice = FakeMotion(), FakeVoice()
     if args.enable_devices:
         from pet_motion import MotionExecutor
-        motion = MotionExecutor(dry_run=False)
+        motion = MotionExecutor(dry_run=not args.enable_motion)
         if args.voice_url:
             voice = HttpVoice(args.voice_url)
     tokens = {role: os.environ[name] for role, name in (("operator", "PET_API_TOKEN"), ("vision", "PET_VISION_TOKEN")) if os.environ.get(name)}

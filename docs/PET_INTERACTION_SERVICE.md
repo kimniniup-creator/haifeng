@@ -13,9 +13,9 @@ $env:PET_VISION_TOKEN = python -c "import secrets; print(secrets.token_urlsafe(3
 python -m pet_interaction --port 8091
 ```
 
-绑定固定回环地址，先独占监听端口再进入生命周期；第二实例绑定失败，不触碰设备。Ctrl+C 只关闭本实例任务、自己的动作执行器与连接，不停止其他 daemon/语音服务。不运行旧 `start.ps1`（它可能另启动 daemon）。
+绑定固定回环地址，先取得跨端口/工作树进程锁并独占监听端口，再进入生命周期；第二实例即使更换端口也会失败，不触碰设备。Ctrl+C 只关闭本实例任务、自己的动作执行器与连接，不停止其他 daemon/语音服务。不运行旧 `start.ps1`（它可能另启动 daemon）。
 
-显式 `--enable-devices` 才构造 live 动作执行器；动作映射仍需动作负责人逐项 `approved:true`，默认全部未批准，服务不改批准状态。另加 `--voice-url http://127.0.0.1:7860` 才订阅语音 owner；该订阅会关闭语音侧本地自动确认声，必须在 owner 交回联调窗口后启用。没有该参数不会访问 7860。不得公开监听或代理这些控制接口。
+显式 `--enable-devices --enable-motion` 才构造 live 动作执行器；动作映射仍需动作负责人逐项 `approved:true`，默认全部未批准，服务不改批准状态。仅 `--enable-devices --voice-url http://127.0.0.1:7860` 可接语音owner，动作仍dry_run；该订阅会关闭语音侧本地自动确认声，必须在 owner 交回联调窗口后启用。没有该参数不会访问7860。不得公开监听或代理这些控制接口。
 
 闲置微动作当前关闭；rest 是行为静默，不调用实体睡眠。没有添加摸头传感器或移动底盘能力。机械语音不朗读中文；原转写仅用于短时规则判断，不写长期记忆。
 
@@ -49,14 +49,14 @@ operator kind 为 stop/rest/wake；`POST /v1/stop` 是 operator 紧急停止入�
 
 语音owner保持唯一session/epoch。连接 `/events`，先接收state快照，发送 `{"type":"subscribe","consumer":"pet-agent"}`；消费turn_changed、speech_started、turn_input final和output_status。支持当前 `turn_id` 整数并原样回传，初始空input_id不会被当成有效final。partial不触发输出；一个final只决策一次，无法绑定当前会话的迟到final拒绝。断连清动作且不自动重连，旧会话不重新激活。
 
-语音回应走 `POST /api/agent-result`，原身份+response_id+semantic_id+`audio_mode=mechanical_only`+Unix expires_at。目前最多final之后2.5秒；HTTP200且accepted=false也记为拒绝。语义音色白名单由语音owner维护（ack/curious/happy/thinking/uncertain/sleepy）。普通未匹配语言仅返回收件确认，不能声称已理解复杂语义；啾啾/揪揪/舅舅是ASR唤名匹配别称，原始转写不改写。
+语音回应走 `POST /api/agent-result`，原身份+response_id+semantic_id+`audio_mode=mechanical_only`+Unix expires_at。目前最多final之后2.5秒；HTTP200且accepted=false也记为拒绝。语义音色白名单由语音owner维护（ack/curious/happy/thinking/uncertain/sleepy）。`pet_interaction/rules.json` 明示唤名别称和命令：你好→happy、看这里→curious、停下/安静→取消动作声音、休息→静默等待唤醒、醒醒/唤名→关注、未知语句→uncertain且不动作，不声称理解复杂语义。称呼和标点仅在匹配副本规范化，stop/rest优先于wake；原转写不改写。
 
 动作直接使用动作owner的 `pet_motion.MotionExecutor`：set_turn(opaque token)、submit(semantic,token,剩余TTL,request_id)、wait(request_id)、cancel/close。语音token取真实session/epoch；视觉token在独立命名空间，是动作取消上下文而非语音epoch。新语音和停止抢占视觉；不会绕过该执行器直接调用SDK。
 
 ## 验证与边界
 
 ```powershell
-python -m pytest tests/test_pet_interaction.py tests/test_pet_motion.py -q
+python -m pytest tests/test_pet_interaction.py tests/test_pet_interaction_process.py tests/test_pet_motion.py -q
 ```
 
 测试仅用合成事件、fake动作和HTTP MockTransport。覆盖身份类型、TTL、重复冲突、容量、视觉乱序与存在状态过期、打断、迟到终态、最终转写重复、机械输出、角色鉴权、JSON重复键/超限、无设备导入。真实中文噪声识别、手势召回、动作形态、音频与摄像头共存仍由设备窗口验收，软件测试不能代替。

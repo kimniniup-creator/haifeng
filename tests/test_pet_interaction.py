@@ -264,3 +264,47 @@ def test_import_does_not_load_hardware_or_old_bridge():
     import subprocess
     result=subprocess.run([sys.executable,"-c","import pet_interaction, pet_interaction.service; import sys; assert not any(n in sys.modules for n in ['bridge.main','sounddevice','cv2','reachy_mini','pet_motion'])"],capture_output=True,text=True)
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("text,intent,sound", [("啾啾", "wake", "curious"), ("揪揪看这里", "attention", "curious"),
+    ("你好", "greeting", "happy"), ("今天的宇宙是什么", "unknown", "uncertain"), ("醒醒", "wake", "curious")])
+def test_minimal_language_intents(text, intent, sound):
+    async def scenario():
+        clock=Clock(); pet=PetController(clock=clock)
+        await pet.voice_turn("voice1",1,1)
+        packet=speech(clock); packet["payload"]={"text":text}
+        result=await pet.handle(packet); await pet.drain()
+        assert pet.decisions[result["decision_id"]]["intent"] == intent
+        assert pet.voice.calls[0]["semantic_id"] == sound
+        assert packet["payload"]["text"] == text
+        await pet.close()
+    run(scenario())
+
+
+@pytest.mark.parametrize("text", ["啾啾停一下", "揪揪，停下！", "舅舅安静", "啾啾停一下不要再说了"])
+def test_named_stop_precedes_wake_and_never_emits_sound(text):
+    async def scenario():
+        clock=Clock(); pet=PetController(clock=clock)
+        await pet.voice_turn("voice1",1,1)
+        packet={"type":"turn_input","session_id":"voice1","epoch":1,"turn_id":1,"input_id":"input1",
+                "phase":"final","text":text,"observed_at":clock()}
+        result=await consume_voice(pet,packet); await pet.drain()
+        assert result["reason"] == "stop" and pet.stopped
+        assert not pet.motion.calls and not pet.voice.calls
+        await pet.close()
+    run(scenario())
+
+
+def test_stop_fault_is_visible_and_capacity_cannot_block_stop():
+    class FaultMotion(FakeMotion):
+        fault="stop_unconfirmed"
+    async def scenario():
+        clock=Clock(); pet=PetController(motion=FaultMotion(),clock=clock,capacity=1)
+        await pet.handle(event(clock))
+        result=await pet.handle(event(clock,"palm_stop",event_id="stop"))
+        assert result["reason"] == "stop_unconfirmed"
+        assert result["outputs"]["motion"]["status"] == "failed"
+        assert pet.snapshot()["motion_fault"] == "stop_unconfirmed"
+        assert pet.snapshot()["last_stop"]["voice"]["status"] == "dry_run"
+        await pet.close()
+    run(scenario())
