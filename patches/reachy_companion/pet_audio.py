@@ -49,6 +49,7 @@ class TurnGate:
         self.muted = False
         self.pending = None
         self.offset = 0
+        self.pending_guard = None
         self.seen = deque(maxlen=256)
         self.events = queue.SimpleQueue()
 
@@ -70,6 +71,7 @@ class TurnGate:
                 identity, response_id, _, _ = self.pending
                 self._receipt(identity, response_id, "interrupted", reason)
             self.pending = None
+            self.pending_guard = None
             self.offset = 0
             self.epoch += 1
             self.input_id = str(uuid.uuid4())
@@ -87,7 +89,7 @@ class TurnGate:
             self.final = True
             return True
 
-    def enqueue(self, identity, response_id, samples, deadline):
+    def enqueue(self, identity, response_id, samples, deadline, guard=None, proactive=False):
         with self.lock:
             identity = {k: identity.get(k) for k in ("session_id", "turn_id", "epoch", "input_id")}
             reason = None
@@ -95,13 +97,14 @@ class TurnGate:
             elif self.muted: reason = "muted"
             elif self.clock() > deadline: reason = "expired"
             elif response_id in self.seen: reason = "duplicate"
-            elif self.answered: reason = "already_answered"
+            elif self.answered and not proactive: reason = "already_answered"
             elif self.pending is not None: reason = "already_speaking"
             if reason:
                 self._receipt(identity, response_id, "dropped", reason)
                 return False
             self.seen.append(response_id)
-            self.answered = True
+            if not proactive: self.answered = True
+            self.pending_guard = guard
             self.pending = (dict(identity), response_id, np.asarray(samples, dtype=np.float32), deadline)
             self.offset = 0
             self._receipt(identity, response_id, "queued")
@@ -114,6 +117,10 @@ class TurnGate:
             if self.pending is None:
                 return
             identity, response_id, samples, deadline = self.pending
+            if self.pending_guard is not None and not self.pending_guard():
+                self._receipt(identity, response_id, "dropped", "proactive_guard")
+                self.pending = None
+                return
             if self.muted or not self.matches(identity) or self.clock() > deadline:
                 reason = "expired" if self.clock() > deadline else "stale_turn"
                 self._receipt(identity, response_id, "dropped", reason)

@@ -117,3 +117,6 @@ Kim changed target during testing: tentative name 啾啾, short mechanical speci
 
 ## 啾啾本地声音交接 — 2026-09-24
 Current service: independent pet_companion.py on 127.0.0.1:7860, SenseVoice Chinese + Silero VAD + original mechanical chirps. See patches/reachy_companion/README.md for exact startup, rollback, test and Agent transport details. Old official Conversation App is stopped; daemon and bridge are unchanged. No dedicated wake word yet. Agent consumer must subscribe on /events before responding via /api/agent-result; no second speech engine should be started. Turn identity is authoritative in voice service. Completed output receipt means last buffer submission, not physical audibility. Live semantic/backend integration, room ASR and natural interruption remain acceptance limits.
+
+## Proactive visual sound handoff
+Voice-side optional /proactive-events and /api/proactive-sound implementation is isolated; production remains unchanged. Use PROACTIVE_AUDIO.md as exact contract. Agent owner 01a0ce0d-92ad-72c1-b7eb-3effbd8b01dc agreed Unix observation timestamps, unchanged epoch on acceptance, no retry playback, happy/ack/curious existing sounds. Secret provisioning and live maintenance require coordinated deployment, not an extra audio process. User speech/stop retains priority.
