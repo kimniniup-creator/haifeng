@@ -9,3 +9,9 @@ __pycache__/
 *.sqlite3-wal
 .env
 upstream/*/.git/
+
+*.msi
+.runtime/
+qa-artifacts/
+.env.*
+!.env.example
