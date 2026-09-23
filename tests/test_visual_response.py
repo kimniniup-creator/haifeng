@@ -133,3 +133,14 @@ def test_global_cooldown_not_bypassed_by_new_track_or_source_session():
         assert len(proactive.calls) == 1
         await pet.close()
     asyncio.run(scenario())
+
+
+def test_voice_authority_disconnect_revokes_proactive_lease():
+    async def scenario():
+        pet, proactive, _ = await setup()
+        await pet.handle(cue()); await pet.drain()
+        await pet.disconnect_voice()
+        assert not proactive.connected and pet.output_id is None
+        assert not pet.voice_connected
+        await pet.close()
+    asyncio.run(scenario())

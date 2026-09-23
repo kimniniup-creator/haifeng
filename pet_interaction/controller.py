@@ -146,6 +146,10 @@ class PetController:
             self._invalidate()
             self.state = "resting" if self.rest_requested else "quiet"
             await self.motion.invalidate_baseline()
+            if self.proactive:
+                # Losing the authoritative voice stream also revokes its optional
+                # visual playback lease; do not leave audio running unobserved.
+                await self.proactive.close()
 
     async def handle(self, raw):
         now = self.clock()

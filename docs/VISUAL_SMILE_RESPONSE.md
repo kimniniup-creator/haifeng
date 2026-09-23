@@ -37,7 +37,13 @@ session/expected_epoch、connection_id 和源session+event_id的SHA256标识。
 
 Focused tests包含真实本机临时WS握手/heartbeat与ASGI HTTP输出、断连、
 拒绝重放、身份/TTL，以及策略质量/冷却/用户优先边界；全部无需设备。
-后续要与视觉 producer 和声音 owner 固定提交组合测试后交独立 QA。
+已组合视觉 `fa36bab` 与声音 `0bd88b6`。新增 `tests/test_smile_audio_combined.py`
+直接跑 FaceCueEngine → Agent ASGI → 声音实际HTTP/WS服务 → output_callback
+非零PCM → completed回执，另测真实讲话打断及连接断开后下一块静默。
+声音测试服务明确禁用lifespan并trap模型/音频启动，不连接任何设备。
+组合初测105 passed、1 skipped（本隔离环境未下载人脸模型）、6项依赖弃用警告。
+声音独立QA发现精确deadline等号仍输出，已交声音owner修复；最终固定组合
+须包含该修复再交QA。本记录不把初测当成QA放行。
 
 生产尚未部署：当前视觉启动仍因自动审批拒绝而停止，不能换工具绕过。
 软件合并与测试继续；正式维护时先统一部署匹配的三方协议、验证唯一实例和
