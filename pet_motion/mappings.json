@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "note": "Name-based candidates, not physically accepted. Recorded motion has no amplitude/duration override. Approve only after motion, return and embedded audio review in an exclusive device window.",
+  "actions": {
+    "attention": {"micro_profile": "head_micro_nod", "approved": false},
+    "listening": {"micro_profile": "head_micro_nod", "approved": false},
+    "thinking": {"dataset": "pollen-robotics/reachy-mini-emotions-library", "action_id": "thoughtful1", "approved": false},
+    "greeting": {"dataset": "pollen-robotics/reachy-mini-emotions-library", "action_id": "welcoming1", "approved": false},
+    "welcome": {"dataset": "pollen-robotics/reachy-mini-emotions-library", "action_id": "welcoming1", "approved": false},
+    "curious": {"dataset": "pollen-robotics/reachy-mini-emotions-library", "action_id": "curious1", "approved": false},
+    "acknowledge": {"micro_profile": "head_micro_nod", "approved": false},
+    "affirm": {"micro_profile": "head_micro_nod", "approved": false},
+    "quiet": {"action_id": null, "approved": false},
+    "rest": {"action_id": null, "approved": false}
+  }
+}

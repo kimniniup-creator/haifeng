@@ -114,3 +114,12 @@
 ## 跨主机动作与表情接口交付
 - 用户要求全部同步GitHub用于另一台主机映射，明确表情也要推。新增docs/reachy-mapping，包含121行机器可读目录（85情绪+35已枚举舞蹈/音乐+1缺项）、当前动作/状态OpenAPI子集、WS事件与停止契约、跨主机连接边界。
 - 校验唯一键、85情绪、34界面舞蹈、120 listed和schema递归引用通过。未推密钥/IP/原始日志/媒体；未发送动作或修改网络。
+
+## Voice delivery — 2026-09-24
+- Isolated codex/voice-response now includes local SenseVoice/Silero WASAPI runner, 啾啾 name and original mechanical calls; old HF app stopped. No daemon/camera/motor/personality/memory edits.
+- Session/turn/epoch/input identity is checked at inference completion, output enqueue and audio callback; one final/response per turn, TTL, stale/duplicate rejection. Agent WS subscribe disables local acknowledgment; semantic backend integration remains separate.
+- Focused 26 tests and repository 19 tests passed. Desktop/mobile visual and control QA passed. Synthetic Mandarin ASR 453–609 ms; one speaker endpoint loopback interruption tail 47 ms. This is not a claim of physical audibility or full conversational acceptance.
+- Runtime environment and models are ignored in D:\海风\.runtime. Local UI http://127.0.0.1:7860/. Run/rollback/contract documented in patches/reachy_companion/README.md. Raw audio/private memories not committed.
+
+### Voice transport recovery follow-up — 2026-09-24
+Independent QA found that a failed WebSocket send removed only the event client, leaving its Agent subscription active and disabling the local acknowledgment indefinitely. Unified cleanup now removes both identities, updates connected state and closes the failed socket with a bounded timeout. Added send-failure, send-timeout and remaining-subscriber regressions: all 29 focused tests pass without opening hardware. Runtime restart is coordinated with the owner because audio testing window has already been returned.

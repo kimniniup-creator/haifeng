@@ -50,3 +50,15 @@
 | 带上她的眼睛｜Agent服务与机器人链路 | 01a0ce0d-92ad-72c1-b7eb-3effbd8b01dc | 照片理解、回应内容/人格/记忆、决策与工具选择、事件服务 |
 - 新两任务首轮只读，实施前分配单写范围；机器人及音频设备窗口必须串行。Agent不能绕开动作队列直接控制电机。
 - 最新实列资产及候选语义见 docs/REACHY_ACTION_CATALOG.md。85情绪+19舞蹈为接口枚举，非全量实体动作验收。
+
+## 宠物交互实施授权与单写范围（最新）
+
+Kim授权实现语音识别、手势识别与宠物交互后端，覆盖此前新任务只读限制。保留眼镜腿实体按键新图、M5同角色短回应、回家接续目标；不恢复M5旧心情/疲惫系统，不新增不存在的触摸或底盘能力。
+
+- 软件集成owner：01a0ce0d-92ad-72c1-b7eb-3effbd8b01dc；后台分支codex/pet-interaction，单写pet_interaction、专属tests/tools/docs/依赖与本登记。负责统一事件consumer、行为调度、模块装配和独立运行入口，旧bridge保持兼容。
+- 动作owner：01a0ced1-4ea8-7bb1-82cc-f85f37604bcd；单写pet_motion与对应测试，唯一动作执行队列；真实映射批准与实机验收归其负责。
+- 语音owner：01a0ced1-9bf3-7962-bf1a-551ca44f6758；单写语音运行器与对应安装/测试，唯一epoch、麦克风和机械声音播放仲裁。
+- 新增可见任务「带上她的眼睛｜视觉与手势交互」：01a0cef5-07df-7080-aa47-6ada1ba0b471；单写pet_vision、专属工具/测试/依赖，产出presence/wave/palm_stop，不执行动作/TTS。
+- QA：01a0ce0d-c4b8-7102-84d5-878ee57d547b；独立工作树验收，单写docs/PET_INTERACTION_ACCEPTANCE.md。软件mock、组合软件、实机证据分开记录。
+- 各模块以固定commit集成，不共享checkout并发写；默认fake，显式启用设备后仍受各owner设备窗口与动作批准限制，不启动第二daemon。总控审核最终PR与验收。
+- 接入/运行见 [宠物交互服务](docs/PET_INTERACTION_SERVICE.md)，阶段记录见 [集成记录](docs/PET_INTERACTION_WORKLOG.md)。现有34舞蹈界面映射已在动作目录末节纠正，19仅为旧REST录制库枚举范围。

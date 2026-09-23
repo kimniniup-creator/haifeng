@@ -106,3 +106,14 @@ Luma没有现场发现；上游有E06-0055真机验证记录，本机未复验�
 - 后续 UI 验收已完成：官方主界面 Ready 和摄像头画面恢复，系统提示已消失；崩溃修复闭环。动作模式及旧 conversation-app 重复进程清理另行处理，不以本次启动恢复宣称动作完整可用。
 
 - 另一台主机做映射从docs/reachy-mapping/README.md进入；actions.json含全部85情绪和舞蹈/音乐，不依赖.runtime。网络与实体执行未验收，另一台主机需自己设置BASE_URL和刷新可用列表。
+
+## 2026-09-23 voice response checkpoint (isolated codex/voice-response)
+
+Observed two Conversation App process groups; live RPC said connected/unmuted but no microphone level events for 12 seconds. Restarting a single identified instance restored capture. One natural turn then reached first audio ~1.01 s after final ASR. Actual app is the Codex LocalCache SDK 1.11.0 installation talking to native daemon 1.8.0; no daemon changes.
+
+Added atomic hash-locked Conversation patch: process mutex, five-buffer capture bound, blocking capture off the asyncio loop, 3 s stall detection with 10 s audio-only retry, and silence frames while muted so remote endpointing does not remain open. Read-only audio_health RPC has counts/timing only. Nine focused tests passed; two regressions demonstrably fail against upstream record_loop; project suite: 19 passed. Text prompt-to-player test: 0.234 s; separate WASAPI speaker-loopback test: 1.438 s to nonzero output. Physical audibility and natural conversational quality remain unaccepted. Synthetic acoustic probe through laptop speaker did not produce matching ASR; do not claim end-to-end success.
+
+Kim changed target during testing: tentative name 啾啾, short mechanical species sounds rather than human TTS, better Chinese ASR, coherent turn-taking/cancellation. Continue with isolated local SenseVoice/Silero evaluation and current-turn-only mechanical audio. No private memory or keys read; no personality changes. Audio device lease remains with voice task 01a0ced1-9bf3-7962-bf1a-551ca44f6758. Owner approved local runner; Agent owner owns semantic interface. No new cloud upload/provider is authorized by this checkpoint.
+
+## 啾啾本地声音交接 — 2026-09-24
+Current service: independent pet_companion.py on 127.0.0.1:7860, SenseVoice Chinese + Silero VAD + original mechanical chirps. See patches/reachy_companion/README.md for exact startup, rollback, test and Agent transport details. Old official Conversation App is stopped; daemon and bridge are unchanged. No dedicated wake word yet. Agent consumer must subscribe on /events before responding via /api/agent-result; no second speech engine should be started. Turn identity is authoritative in voice service. Completed output receipt means last buffer submission, not physical audibility. Live semantic/backend integration, room ASR and natural interruption remain acceptance limits.
