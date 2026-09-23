@@ -29,6 +29,12 @@ def create_app(controller=None, tokens=None, voice_url=None):
                 await asyncio.sleep(0.2)
         expiry = asyncio.create_task(expiry_loop())
         link = asyncio.create_task(run_voice_link(controller, voice_url, shutdown)) if voice_url else None
+        if link:
+            def link_done(task):
+                if not task.cancelled():
+                    error = task.exception()
+                    controller.voice_link_error = type(error).__name__ if error else None
+            link.add_done_callback(link_done)
         app.state.voice_link = link
         try:
             yield

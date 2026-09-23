@@ -39,7 +39,7 @@ python -m pet_interaction --port 8091
 
 示例时间须替换为真实采集时间，不能用当前时间给旧帧续命。允许 TTL 0.001–30秒，未来偏差至多2秒，服务启动前事件拒绝。停止优先级最高；容量满也不阻止有效停止。事件ID在生产者会话内唯一，重复保留原ID；同ID改内容拒绝。有限缓存保留到事件过期，满时拒绝普通新事件，不淘汰仍有效的去重身份；服务重启从静默开始，不恢复排队输出。
 
-vision kind 为 presence/wave/palm_stop。presence 必须携带 `payload.present` 布尔值；`basis:hand`只代表手可见，不代表识别人脸或用户身份。当前三类事件最低confidence=0.7；MediaPipe配置下限不是校准概率，稳定窗口由视觉owner实现。服务再次做TTL、乱序、去重与冷却（presence 10秒、wave 3秒）；缺失presence更新超过事件TTL会清除可见状态。
+vision wire kind 为 presence/wave/palm_stop；产品含义为 `hand_presence`（手部可见性）。presence 必须携带 `payload.present` 布尔值；`basis:hand`只代表手可见，不代表人体在场、人脸或用户身份。false只表示未见合格手。当前三类事件最低confidence=0.7；MediaPipe配置下限不是校准概率，稳定窗口由视觉owner实现。服务再次做TTL、乱序、去重与冷却（presence 10秒、wave 3秒）；稳定心跳仅续租不重触动作。缺失更新超过事件TTL变unknown/null，不能说人离开了。状态提供hand_presence与hand_visibility；present字段仅为兼容别名。
 
 operator kind 为 stop/rest/wake；`POST /v1/stop` 是 operator 紧急停止入口。停止后保持安静，仅明确唤醒或新语音轮解除，视觉存在不自动解除停止。张掌停止同时请求语音owner的interrupt，使其自己推进epoch。
 
@@ -60,5 +60,9 @@ python -m pytest tests/test_pet_interaction.py tests/test_pet_interaction_proces
 ```
 
 测试仅用合成事件、fake动作和HTTP MockTransport。覆盖身份类型、TTL、重复冲突、容量、视觉乱序与存在状态过期、打断、迟到终态、最终转写重复、机械输出、角色鉴权、JSON重复键/超限、无设备导入。真实中文噪声识别、手势召回、动作形态、音频与摄像头共存仍由设备窗口验收，软件测试不能代替。
+
+组合测试另见 `tests/test_pet_interaction_integration.py`：实际GestureEngine→规则后端→实际dry_run执行器，以及实际语音ASGI接口→内存PCM callback。后者需要独立测试环境中的numpy/sherpa-onnx/sounddevice，仅导入模块，不打开设备、加载模型或进入音频lifespan。可用`uv venv .runtime/pet-integration-env --python 3.12`，再按requirements-pet.txt加numpy==2.5.3、sherpa-onnx==1.13.8、sounddevice==0.5.6、pytest==9.1.1安装；不得将语音/视觉依赖强行同步进原生SDK环境。
+
+Windows便捷启动为 `tools/run_pet_interaction.ps1 -Python <独立环境python路径>`；脚本仅在忽略目录`.runtime/pet-local-tokens.json`生成本机角色令牌，不显示令牌。视觉独立进程须读取该文件vision字段设置PET_VISION_TOKEN，不能使用operator令牌。脚本默认fake，只有显式EnableDevices/VoiceUrl/EnableMotion才启用对应出口。文件含本机凭据，不上传。
 
 官方依据（2026-09-23读取）：[Conversation App](https://github.com/pollen-robotics/reachy_mini_conversation_app)以工具队列连接语音、视觉与动作；[SDK Quickstart](https://github.com/pollen-robotics/reachy_mini/blob/main/docs/source/SDK/quickstart.md)区分实机/模拟使用。这里只复用有证据的输入和队列分工，不宣称新增传感器。行为规则、独立epoch消费与防重放策略属于本项目实现。

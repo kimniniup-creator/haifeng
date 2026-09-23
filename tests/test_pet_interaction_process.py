@@ -10,12 +10,13 @@ import time
 import httpx
 
 
-def test_fake_process_round_trip_and_duplicate_instance_rejection():
+def test_fake_process_round_trip_and_duplicate_instance_rejection(tmp_path):
     root = Path(__file__).resolve().parents[1]
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
         port = reservation.getsockname()[1]
     env = os.environ.copy()
+    env["TEMP"] = env["TMP"] = str(tmp_path)  # Separate test lease, never reserve a production lease.
     env["PET_API_TOKEN"] = secrets.token_urlsafe(32)
     env["PET_VISION_TOKEN"] = secrets.token_urlsafe(32)
     args = [sys.executable, "-m", "pet_interaction", "--port", str(port)]

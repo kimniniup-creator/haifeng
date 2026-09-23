@@ -7,3 +7,11 @@
 - 初次focused测试23项通过；未连接真实服务或设备。纳入动作owner首个模块和QA基线文档；动作自然完成/取消竞态修复仍待其固定提交，首个模块不代表最终动作验收。
 - 语音实际接口形状只读核对，兼容整数turn_id和空启动input_id、200 accepted=false；连接必须显式启用，等待语音owner联调窗口。
 - 待办：固定本阶段commit交独立QA；纳入动作修复/视觉/语音固定提交；离线组合验收与运行入口复检；集中提交PR。设备共存/现场听感由相应owner与Kim验收。
+
+## 2026-09-24 集成进展
+
+- 已纳入动作4679481停止竞态修复与645c98受限微动作、视觉f450939、语音23a6dc5及前置契约。微动作/profile批准仍关闭。
+- QA复现的称呼遮蔽stop与stop_unconfirmed不可见已修复；新35项pet测试通过，包括跨端口进程锁、实际fake TCP往返与生命周期关闭。组合77通过/1真实模型依赖缺失跳过；该轮尚未包含独立micro测试文件，不能将77写成全测试覆盖。
+- 实际7860一次WS订阅预检：snapshot accepted、mechanical_only、整数turn_id、semantic_agent_connected=true，退出后已释放；动作调用0、声音调用0。未新开音频进程或注入声音。该证据只说明软件订阅联通。
+- 最小规则覆盖唤名/你好/看这里/停止/安静/休息/醒醒，未知语句机械疑惑且不动作。ASR同音别称配置可审阅，原转写不改。
+- 后续接口：总控确认事件开始期限与执行budget分离；动作owner在独立提交增加start_deadline/execution_budget_seconds，收到固定SHA后接入，不通过刷新event时间绕过过期。视觉owner正在修角色token、同步consumer例子与presence续租；后端已准备续租无重复动作、断流unknown。

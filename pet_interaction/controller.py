@@ -24,7 +24,7 @@ class PetController:
         self.clock, self.capacity = clock, capacity
         self.policy = RulePolicy()
         self.started_at = clock()
-        self.state, self.present = "quiet", False
+        self.state, self.present = "quiet", None
         self.voice_context = None
         self.voice_connected = False
         self.retired_voice_sessions = set()
@@ -32,6 +32,8 @@ class PetController:
         self.voice_final = None
         self.presence_until = 0.0
         self.stopped = False
+        self.rest_requested = False
+        self.voice_link_error = None
         self.closed = False
         self.last_stop = None
         self.seen = OrderedDict()
@@ -45,8 +47,9 @@ class PetController:
         self.lock = asyncio.Lock()
 
     def snapshot(self):
-        return {"state": self.state, "present": self.present, "stopped": self.stopped,
-                "voice_connected": self.voice_connected, "voice_context": self.voice_context,
+        return {"state": self.state, "present": self.present, "hand_presence": self.present,
+                "hand_visibility": "unknown" if self.present is None else ("visible" if self.present else "not_visible"), "stopped": self.stopped,
+                "voice_connected": self.voice_connected, "voice_context": self.voice_context, "voice_link_error": self.voice_link_error,
                 "active_decision_id": self.active_id, "closed": self.closed,
                 "devices": "adapter_controlled", "display_name": "啾啾",
                 "motion_fault": getattr(self.motion, "fault", ""), "last_stop": self.last_stop}
@@ -92,7 +95,8 @@ class PetController:
                     current["input_id"] = input_id
                 if reason == "speech_started" and self.voice_final is None:
                     self.voice_busy_until = self.clock() + 30
-                    self.state = "attention"
+                    if not self.rest_requested:
+                        self.state = "attention"
                 self.voice_connected = True
                 return {"status": "duplicate"}
             if current and current["session_id"] != session_id:
@@ -104,7 +108,7 @@ class PetController:
             self.voice_final = None
             self.voice_connected = True
             self.voice_busy_until = self.clock() + (30 if reason == "speech_started" else 0)
-            resting = self.state == "resting"
+            resting = self.rest_requested
             self.stopped = resting or reason in {"interrupt", "stop", "manual_preview", "audition", "muted", "mute", "overflow"}
             self.state = "resting" if resting else ("quiet" if self.stopped or reason == "snapshot" else "attention")
             await self.motion.cancel()
@@ -117,7 +121,7 @@ class PetController:
                 self.retired_voice_sessions.add(self.voice_context["session_id"])
             self.voice_busy_until = 0
             self._invalidate()
-            self.state = "quiet"
+            self.state = "resting" if self.rest_requested else "quiet"
             await self.motion.cancel()
 
     async def handle(self, raw):
@@ -172,12 +176,14 @@ class PetController:
         if is_stop or is_rest:
             self._invalidate()
             self.stopped = True
-            self.state = "resting" if is_rest else "quiet"
+            self.rest_requested = is_rest or self.rest_requested
+            self.state = "resting" if self.rest_requested else "quiet"
             outputs = await self._stop_outputs()
             unconfirmed = any(r.get("status") == "failed" for r in outputs.values())
             return {"status": "accepted", "reason": "stop_unconfirmed" if unconfirmed else ("rest" if is_rest else "stop"),
                     "state": self.state, "outputs": outputs}
         if event.kind == "presence":
+            was_present = self.present
             self.present = event.payload["present"]
             self.presence_until = event.expires_at if self.present else 0
             if not self.present:
@@ -187,11 +193,14 @@ class PetController:
                     if self.state != "resting":
                         self.state = "quiet"
                 return {"status": "accepted", "reason": "presence_cleared", "state": self.state}
+            if was_present is True:
+                return {"status": "accepted", "reason": "presence_refreshed", "state": self.state}
         wake = event.kind == "wake" or intent == "wake"
         if self.stopped and not wake:
             return {"status": "suppressed", "reason": "stopped"}
         if wake:
             self.stopped = False
+            self.rest_requested = False
         if event.source == "vision" and now < self.voice_busy_until:
             return {"status": "suppressed", "reason": "voice_priority"}
         if self.active_id and PRIORITY[event.kind] < self.active_priority:
@@ -282,7 +291,7 @@ class PetController:
         """Expire observation state; deliberately no autonomous idle movement."""
         async with self.lock:
             if self.present and self.clock() >= self.presence_until:
-                self.present = False
+                self.present = None
                 if self.active_priority <= PRIORITY["wave"]:
                     self._invalidate()
                     await self.motion.cancel()
