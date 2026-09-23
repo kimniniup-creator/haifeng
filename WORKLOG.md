@@ -46,3 +46,10 @@
 - 阻塞：无声仍需现场听感/断电检查连接；相机及电机到位未通过，详见矩阵；不无限重试。
 
 - 收口检查：相机原生阻塞复测被25秒看门狗终止，确认不无限挂起；81个OpenAPI操作覆盖检查通过，4个脚本编译通过。8000/8088各单实例、队列空、disabled。Lucas本机attention-pet命令不可用，现场听感问题已在任务内提出。
+
+## 2026-09-23 官方客户端安装与首次启动修复
+- 用户明确要求打开官方软件，后续纠正应自主处理toggle/接口。已安装Reachy Mini Control 0.9.34，Windows管理员授权由用户完成。
+- 纠正此前“窗口已打开即可用”：实际仍卡Installing Python runtime。日志明确bootstrap报 Missing expected target directory for Python minor version link；Python 3.12.14本体可执行，uv 0.12.18与本机0.11.24均复现，不能断言仅新uv回归。
+- 在客户端自身数据目录用Python绝对路径创建此前不存在的.venv/apps_venv，安装SDK依赖。重开客户端后官方trampoline按内置规则将自身两个环境对齐到reachy-mini==1.8.0，进入USB连接/GStreamer首次预热。项目D:\海风\reachy-env的1.11.0不变。
+- 旧8000 daemon已被客户端自身清理；客户端是唯一硬件daemon控制方。后续接口控制必须先核验当前版本与端点，不照搬1.11矩阵作为1.8运行结论。
+- 最终验证：完整退出客户端清理媒体残留后重启，UI实际进入Ready / USB，App0.9.34 / Daemon1.8.0，WebRTC DataChannel connected。相机UI仍显示无法播放媒体；扬声器100%不代表可闻已通过。启动初始化问题已解决，不宣称所有硬件正常。用户操作期间UI出现Wake up animation且电机enabled，本轮没有主动下发wake_up或扩大运动。
