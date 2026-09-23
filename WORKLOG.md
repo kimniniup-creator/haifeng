@@ -145,3 +145,8 @@ Independent QA found that a failed WebSocket send removed only the event client,
 - Main current outcome still awaits independent combination QA and supervised
   live camera/audibility. Vision startup's previous automatic policy rejection
   remains recorded; no retry through another tool. Use SMILE_MAINTENANCE_PLAN.md.
+
+- Final offline combination QA closed at source162c9c3: independent51+8 pass,
+  tests/report imported without unrelated QA branch history. This supersedes the
+  pending independent review line above. Supervised live acceptance remains pending;
+  no deployment or hardware access was performed during the implementation turn.

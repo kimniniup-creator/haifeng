@@ -137,5 +137,6 @@ exact-TTL fix dbd8bd5 and face source fa36bab. Tests now cross real HTTP/WS into
 the existing output callback and assert nonzero PCM/terminal receipt, speech
 interruption and disconnect silence. Fixed focused51 plus prior interaction11
 pass; no physical playback or face accuracy claim. Independent final combination
-QA is pending. Use docs/SMILE_MAINTENANCE_PLAN.md as the single deployment plan.
+QA passed51+8; evidence source162c9c3 is imported in docs/VISUAL_SOUND_QA_RESULTS.md
+and qa/visual_sound. Use docs/SMILE_MAINTENANCE_PLAN.md as the single deployment plan.
 Production remains unchanged; previous vision restore was rejected before launch.
