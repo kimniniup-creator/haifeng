@@ -24,3 +24,13 @@
 - PR #4集中评审；原分支commit与远端一致，阶段文件均在本后台工作树，未抢写共享checkout。等待最终增量QA和总控裁决合main；真人连续语音/手势与动作到位仍独立验收。
 
 - Final follow-up: included motion read-only diagnosis (908810c) and bounded camera-window CLI (c38788d); retained default 15 seconds, explicit maximum 60. Focused vision suite: 25 passed, 1 skipped (real model absent in integration env); no camera opened by these tests. Corrected mapping handoff repository visibility to user-confirmed public. Backend PID46292 stays on tested software; these changes do not require its restart.
+
+## Main deployment checkpoint (2026-09-24)
+
+Main code 50762eb includes PR4, PR5 and PR6. The shared checkout was updated by clean fast-forward only. Interaction API listens on 127.0.0.1:8091, actual server PID 46292, launched from the main workspace with the isolated integration interpreter and `--enable-devices --voice-url http://127.0.0.1:7860`. No `--enable-motion` flag was supplied; mapping approvals remain false. Backend source has not changed since its verified restart.
+
+Independent read-only checks during continuous vision operation observed `voice_connected=true`, `voice_link_error=null`, `hand_visibility=not_visible`; voice port 7860 (actual listener PID 41268) reported `semantic_agent_connected=true`, `mode=mechanical_only`, `error=null` and ongoing listening/hearing. No daemon or voice process was restarted for this deployment. Vision process and stop details are maintained in `docs/pet_vision/DEPLOYMENT_2026-09-24.md`.
+
+To stop only the interaction service, send authenticated operator `POST http://127.0.0.1:8091/v1/shutdown`. Read the operator credential locally from ignored `.runtime/pet-local-tokens.json`; never copy it into documentation or command-line arguments. This endpoint does not stop the independent voice or vision owners. Process IDs describe this checkpoint and must be verified before any later stop operation.
+
+The 34 UI dance entries retain their existing catalog mapping (33 listed, one missing `headbanger_combo`); software integration does not grant physical approval. Real human gesture ground truth, audible continuous Chinese interaction, long-duration media coexistence and the failed motion target/hold acceptance remain distinct limits.
