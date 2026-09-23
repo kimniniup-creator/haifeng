@@ -5,6 +5,17 @@ daemon. This module does not install itself or start a service.
 """
 import math
 import time
+import inspect
+
+
+def cached_scalar(backend, name, expected_type):
+    """Static scalar lookup: never execute descriptors or dynamic getters."""
+    value = inspect.getattr_static(backend, name, None)
+    if type(value) is not expected_type:
+        return None
+    if expected_type is float and not math.isfinite(value):
+        return None
+    return value
 
 
 def plain(value):
@@ -34,13 +45,16 @@ def snapshot(backend):
         "effective_target_pose": "_last_target_head_pose",
         "effective_body_yaw": "_last_target_body_yaw",
         "speech_offsets": "_speech_offsets",
-        # Python dispatch gates, not motor-side torque/mode readback.
-        "torque_enabled_cached": "_torque_enabled",
-        "head_operation_mode_cached": "_current_head_operation_mode",
-        "antennas_operation_mode_cached": "_current_antennas_operation_mode",
+    }
+    cached_fields = {
+        "torque_enabled_cached": ("_torque_enabled", bool),
+        "head_operation_mode_cached": ("_current_head_operation_mode", int),
+        "antennas_operation_mode_cached": ("_current_antennas_operation_mode", int),
     }
     before = {key: plain(getattr(backend, attr, None)) for key, attr in fields.items()}
+    before.update({key: cached_scalar(backend, *spec) for key, spec in cached_fields.items()})
     after = {key: plain(getattr(backend, attr, None)) for key, attr in fields.items()}
+    after.update({key: cached_scalar(backend, *spec) for key, spec in cached_fields.items()})
     mode = getattr(backend, "motor_control_mode", None)
     mode = getattr(mode, "value", mode)
     return {"schema_version": 1, "read_only": True, "timestamp": time.time(),
@@ -50,7 +64,7 @@ def snapshot(backend):
             "ik_required": bool(getattr(backend, "ik_required", False)),
             # Live backend scalar, unlike RobotBackendStatus.last_alive. Keep
             # tick freshness outside stable_read: a normal tick may advance it.
-            "last_alive_unix": plain(getattr(backend, "last_alive", None)),
+            "last_alive_unix": cached_scalar(backend, "last_alive", float),
             # Private depth is a scalar; avoid invoking locking or move methods.
             "active_move_depth": plain(getattr(backend, "_active_move_depth", None))}
 
