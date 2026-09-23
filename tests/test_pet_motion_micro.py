@@ -188,6 +188,32 @@ class MicroTests(unittest.IsolatedAsyncioTestCase):
         target = target_pose(origin, profile)
         self.assertAlmostEqual(math.degrees(rotation_distance(origin["head"], target["head"])), 1.5)
 
+    async def test_native_near_rotation_is_projected_with_translation_preserved(self):
+        state = copy.deepcopy(self.daemon.state)
+        raw = np.array([[.9972165811070992, .04758257970107439, .06161645446330995],
+                        [-.015496377863429913, .896532907062364, -.44273017724239216],
+                        [-.07631490460429967, .4403034295052053, .8948742511107254]])
+        head = np.array(state["head_pose"]["m"]).reshape(4, 4)
+        head[:3, :3] = raw
+        state["head_pose"]["m"] = head.reshape(-1).tolist()
+        checked = checked_pose(state)
+        np.testing.assert_allclose(checked["head"][:3, :3].T @ checked["head"][:3, :3], np.eye(3), atol=1e-12)
+        np.testing.assert_array_equal(checked["head"][:3, 3], head[:3, 3])
+        self.assertLess(np.max(np.abs(checked["head"][:3, :3] - raw)), .001)
+        self.assertEqual(state["head_pose"]["m"], head.reshape(-1).tolist())
+        self.daemon.state = state
+        receipt = await self.motion.submit("attention", "probe", 10)
+        self.assertEqual((await self.motion.wait(receipt.request_id)).status, "completed")
+
+    async def test_projection_rejects_scale_shear_reflection_and_bad_bottom_row(self):
+        for index, value in ((0, 1.02), (1, .1), (10, -1), (15, .9)):
+            state = copy.deepcopy(self.daemon.state)
+            head = np.eye(4).reshape(-1).tolist()
+            head[index] = value
+            state["head_pose"]["m"] = head
+            with self.assertRaises(ValueError):
+                checked_pose(state)
+
 
 class MicroWireTests(unittest.IsolatedAsyncioTestCase):
     async def test_goto_and_hold_only_measured_values(self):
