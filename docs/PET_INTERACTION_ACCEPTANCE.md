@@ -55,3 +55,12 @@
 ## 后续交接
 
 集成负责人接收本文和可测分支；QA在固定提交上审查及运行 focused tests。各模块软件通过后才能进入受控实机窗口。本文的待测项仍是未验，不能因为基线测试通过或模块 owner 自报完成而自动放行。
+
+## 动作 PR #1 独立审查
+
+审查版本 `4204150a49e77b108779664519f56cf0b91be725`，PR：<https://github.com/kimniniup-creator/haifeng/pull/1>。在 QA 忽略目录解出完整固定提交，以隔离 Python 3.12.13 运行 `python -m pytest -q tests/test_pet_motion.py`：**25 passed**。没有设备连接。
+
+- 默认 dry_run、未批准映射、串行有界队列、UUID相关终态、POST返回前取消及停止未确认锁定已有 mock 覆盖。静态源码确认 transport 先建立 WebSocket 上下文再 POST；实际 daemon 订阅时序与网络断连仍未实机验证。
+- **P2待修：自然完成与取消竞态导致误锁定。** `MotionExecutor._stop` 在 stop HTTP 失败后不读取已缓冲的匹配 `move_completed`，直接永久标 `stop_unconfirmed`。所审阅的本地 SDK `stop_move_task` 对已完成并移除的 UUID 抛 KeyError，因此完成后恰好取消是合理触发路径。
+- 独立假设备复现：正常 start；stop(uuid) 先将匹配 `move_completed` 放进订阅队列，再抛 HTTP等价异常；cancel 后得到 `failed / stop_unconfirmed`、`available=False`，队列仍保留那条可信完成事件。复现只操作内存，不调用真实接口。
+- 修复要求：stop POST异常时，仍在明确期限内核对已订阅的匹配终态；没有确认则保持锁定，不能把HTTP错误一概视为成功。补测完成与取消交叉、无终态及错误UUID；交动作 owner 修改后复验。
