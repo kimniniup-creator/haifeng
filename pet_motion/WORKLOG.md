@@ -101,3 +101,9 @@ SDK commands have no ack, so pin verification checks desired/actual joints and
 IK-disabled state. Profiles remain unapproved pending actual diagnostics, focused
 tests, independent QA and physical command/arrival/hold/stop/return acceptance.
 LOOK_UP.md is the cross-owner and second-host interface handoff.
+
+## 2026-09-24 independent posture QA fixes
+- QA reproduced caller cancellation abandoning idle joint hold and repeated look_up reporting success before joint tracking checks. Fixed idle hold as a separately bounded shielded task; admission stays closed until verified success or latched fault, then cancellation propagates. Failed hold clears baseline.
+- Repeated look_up now checks current/target joints before its baseline path and continuously verifies measured pose and tracking for the configured stability window. It sends no additional move.
+- Original 59 tests plus both independent reproductions passed (61 total). Added success-after-cancellation and delayed tracking-error regressions; focused result recorded with final commit handoff.
+- Native telemetry remains unavailable pending maintenance owner's controlled/user-assisted restart. Automatic approval review rejected the owner's process restart; no workaround or device command attempted by this owner. All persisted motion approvals remain false.
