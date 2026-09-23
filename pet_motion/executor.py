@@ -67,6 +67,7 @@ class MotionExecutor:
         self._fault = ""
         self._baseline = None
         self._posture_seed = None
+        self._posture_session_invalidated = False
 
     @property
     def available(self):
@@ -150,6 +151,8 @@ class MotionExecutor:
         mapping = self.mappings.get(semantic)
         if mapping is None:
             return self._save(replace(result, reason="unknown_semantic"))
+        if "posture_profile" in mapping and self._posture_session_invalidated:
+            return self._save(replace(result, reason="posture_session_invalidated_requires_review"))
         if semantic == "return_to_start" and (self._baseline is None or baseline_id != self._baseline.id or self._baseline.expires <= time.monotonic()):
             return self._save(replace(result, reason="baseline_missing_or_invalid"))
         if mapping.get("action_id") is None and "micro_profile" not in mapping and "posture_profile" not in mapping:
@@ -176,6 +179,60 @@ class MotionExecutor:
     async def cancel(self):
         async with self._control:
             await self._cancel("cancelled")
+
+    async def invalidate_baseline(self):
+        """Retire a voice session, not an utterance epoch. Never recapture origin.
+
+        After any posture attempt, further postures require owner review. Keep
+        the private seed to prevent a new session adding pitch to a held pose.
+        """
+        async with self._control:
+            pending_posture = any(
+                "posture_profile" in self.mappings.get(self._results[key].semantic_id, {})
+                for key in self._futures
+            )
+            if self._posture_seed is not None or self._baseline is not None or pending_posture:
+                self._posture_session_invalidated = True
+            try:
+                await self._cancel("cancelled")
+            finally:
+                self._baseline = None
+
+    async def review_reset_posture_baseline(self):
+        """Owner-only read-only review; never expose as a voice command.
+
+        Lease expiry does not erase the physical origin. Only stable measured
+        return to that origin permits clearing session retirement, not faults.
+        """
+        async with self._control:
+            if self._closed or self._fault or self._active is not None or self._queue:
+                return False
+            if not self._posture_session_invalidated or self._posture_seed is None:
+                return False
+            from .posture import diagnostic_pose
+            from .micro import matches
+            import numpy as np
+            self._stopping = True
+            try:
+                async with asyncio.timeout(self.stop_timeout):
+                    stable_since = None
+                    async with self.transport.session() as session:
+                        while True:
+                            pose = diagnostic_pose(await session.diagnostics())
+                            if not matches(pose, self._posture_seed.origin) or np.max(np.abs(pose["joints"]-pose["target_joints"])) > .005:
+                                return False
+                            if stable_since is None:
+                                stable_since = time.monotonic()
+                            if time.monotonic()-stable_since >= self.posture_profiles["look_up"]["stable_seconds"]:
+                                break
+                            await asyncio.sleep(.05)
+                self._baseline = self._posture_seed = None
+                self._posture_session_invalidated = False
+                return True
+            except Exception:
+                return False
+            finally:
+                self._stopping = False
 
     async def _cancel(self, reason):
         self._stopping = True

@@ -107,3 +107,8 @@ LOOK_UP.md is the cross-owner and second-host interface handoff.
 - Repeated look_up now checks current/target joints before its baseline path and continuously verifies measured pose and tracking for the configured stability window. It sends no additional move.
 - Original 59 tests plus both independent reproductions passed (61 total). Added success-after-cancellation and delayed tracking-error regressions; focused result recorded with final commit handoff.
 - Native telemetry remains unavailable pending maintenance owner's controlled/user-assisted restart. Automatic approval review rejected the owner's process restart; no workaround or device command attempted by this owner. All persisted motion approvals remain false.
+
+## 2026-09-24 session ownership fix
+- Integration QA demonstrated first-action interruption could leave a private origin that a later session reused to issue a new public baseline. Added explicit session invalidation separate from utterance cancellation, retaining seed but rejecting postures until owner review.
+- Added owner-only read-only review reset requiring stable original measured pose, zero offsets and joint tracking, with no motion/queue/fault. It cannot clear faults and is not exposed to voice. Expired origin is still checked, not discarded.
+- Added regressions for completed and first-receipt-inflight session retirement, no-posture session changes, repeated invalidation, expired-seed review, and cancellation/timeout fault retention. No live device operations.
