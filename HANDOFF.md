@@ -49,3 +49,8 @@ Luma没有现场发现；上游有E06-0055真机验证记录，本机未复验�
 - 最新状态覆盖前项阻塞：用户完成物理重连，官方updater已升1.11，补丁已重新适配安装，12项软件测试通过且helper安装哈希一致。真实连接恢复running/ready，error=null，队列空；保持官方客户端唯一daemon。
 - 小幅+0.05rad实际+0.0276117rad，偏差超过0.015rad探测验收门槛；返回起点成功。未做更大/连续完整表情，不能称整机稳定或精度通过。原始记录.runtime/expression-small-motion.json；下一步仅在明确机械/精度原因后扩展实机验收。用户询问说话无应答，已说明当前未装对话应用，LISTENING不等于语音助手运行。
 - 最终UI仍Connecting/Healthcheck，后台state/full与status健康；远端目录/TURN/updater网络异常，刷新未解决，尚待继续客户端启动链排查。不要报告整套界面已稳定可用。补丁提交e616040已推送，后续记录独立提交。
+
+## 最新：中文语音助手已安装（2026-09-23）
+- 官方Conversation App 1.0.1已运行，HF Hosted后台已连接；7860界面选Haifeng/Vivian，麦克风已开。UI标签Mute microphone是点击动作，不表示静音。
+- 本次首启仍触发相机/九电机错误，故临时采用patches/reachy_companion的voice-only适配，daemon媒体released=true，切勿随手acquire；目前真实daemon健康。仅官方客户端为8000唯一daemon。
+- 已有音频响应增量，实际中文听感待用户回复；不能称整机稳定。人格和可逆安装器已保存，详情README。无需新增API key，未设开机启动，官方更新可能覆盖适配。
