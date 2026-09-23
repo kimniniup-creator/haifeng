@@ -94,7 +94,7 @@ class MicroTests(unittest.IsolatedAsyncioTestCase):
         np.testing.assert_allclose(h[:3, 3], origin["head"][:3, 3])
         self.assertEqual(first["antennas"], [.23, -.14])
         self.assertEqual(first["body_yaw"], .08)
-        self.assertEqual(final["head_pose"], self.daemon.origin["head_pose"])
+        np.testing.assert_allclose(final["head_pose"]["m"], origin["head"].reshape(-1), atol=1e-12)
         self.assertEqual(self.daemon.holds, [])
 
     async def test_cancel_stops_only_current_uuid_holds_and_never_returns(self):
@@ -240,7 +240,7 @@ class MicroWireTests(unittest.IsolatedAsyncioTestCase):
             await session.hold_current()
         import json
         held = json.loads(requests[-1].content)
-        self.assertEqual(held["target_head_pose"], daemon.state["head_pose"])
+        np.testing.assert_allclose(held["target_head_pose"]["m"], checked_pose(daemon.state)["head"].reshape(-1), atol=1e-12)
         self.assertEqual(held["target_antennas"], [.23, -.14])
         self.assertEqual(held["target_body_yaw"], .08)
         self.assertTrue(any(r.url.path.endswith("/move/goto") for r in requests))
