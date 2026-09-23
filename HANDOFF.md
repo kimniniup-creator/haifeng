@@ -129,3 +129,13 @@ physical deployment acceptance remain pending. Preserve the current live state.
 
 ## Proactive visual sound handoff
 Voice-side optional /proactive-events and /api/proactive-sound implementation is isolated; production remains unchanged. Use PROACTIVE_AUDIO.md as exact contract. Agent owner 01a0ce0d-92ad-72c1-b7eb-3effbd8b01dc agreed Unix observation timestamps, unchanged epoch on acceptance, no retry playback, happy/ack/curious existing sounds. Secret provisioning and live maintenance require coordinated deployment, not an extra audio process. User speech/stop retains priority.
+
+## Stable smile combined candidate
+
+PR11 is the coordinated candidate: smile code fixed at 7db4d40, including voice
+exact-TTL fix dbd8bd5 and face source fa36bab. Tests now cross real HTTP/WS into
+the existing output callback and assert nonzero PCM/terminal receipt, speech
+interruption and disconnect silence. Fixed focused51 plus prior interaction11
+pass; no physical playback or face accuracy claim. Independent final combination
+QA is pending. Use docs/SMILE_MAINTENANCE_PLAN.md as the single deployment plan.
+Production remains unchanged; previous vision restore was rejected before launch.
