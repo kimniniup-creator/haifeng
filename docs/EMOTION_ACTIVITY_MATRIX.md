@@ -60,11 +60,11 @@ anger 与 confusion 需要用户把事件说出来。** 若要让照片也能产
 
 ## 复现
 
+在 `local_agent` 目录下运行，服务需已启动。图片目录里按类名放 `<类名>.jpg`：
+
 ```powershell
-# 图片路径：每类一张，独立会话
-.venv\Scripts\python.exe toolsun_emotions.py <图片目录> joy excitement sadness anger confusion
-# 文字路径：anger / confusion
-.venv\Scripts\python.exe toolsun_text_emotions.py
+.venv\Scripts\python.exe tools\run_emotions.py <图片目录> joy excitement sadness anger confusion
+.venv\Scripts\python.exe tools\run_text_emotions.py
 ```
 
 逐条原始任务记录在忽略目录 `local_agent/data/emo-*.json`、`text-*.json`，
