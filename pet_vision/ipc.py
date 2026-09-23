@@ -5,6 +5,7 @@ from pathlib import Path
 import struct
 import subprocess
 import threading
+import sys
 from .pipeline import Frame
 
 
@@ -30,15 +31,17 @@ def _read_exact(stream,n):
     return data
 
 
-def frames(*, direct=False):
+def frames(*, direct=False, opencv=False):
     import numpy as np
-    python=os.environ.get('PET_VISION_IPC_PYTHON')
+    python=sys.executable if opencv else os.environ.get('PET_VISION_IPC_PYTHON')
     if not python or not Path(python).is_file():
         raise RuntimeError('Set PET_VISION_IPC_PYTHON to verified native SDK Python')
-    script=Path(__file__).resolve().parents[1]/'tools/run_pet_vision_ipc.py'
+    script=Path(__file__).resolve().parents[1]/'tools'/('run_pet_vision_camera.py' if opencv else 'run_pet_vision_ipc.py')
     flags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0
     command=[python,str(script),'--pipe','--seconds','15']
-    if direct:
+    if opencv:
+        command.append('--owner-approved')
+    elif direct:
         command.append('--direct-camera-owner-approved')
         name=os.environ.get('PET_VISION_DEVICE_NAME')
         if name:
@@ -78,3 +81,8 @@ def frames(*, direct=False):
 def leased_video_frames():
     """Explicit opt-in only after media owner confirms an exclusive video lease."""
     yield from frames(direct=True)
+
+
+def leased_opencv_frames():
+    """Windows DirectShow alternative; requires exclusive Reachy video lease."""
+    yield from frames(opencv=True)

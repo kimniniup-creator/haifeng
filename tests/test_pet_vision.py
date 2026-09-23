@@ -47,7 +47,8 @@ def test_duplicate_frame_and_low_confidence():
     obs=Observation(100,(open_hand(),))
     engine.update(obs,now=100)
     assert engine.update(obs,now=100.1)==[]
-    assert feed(GestureEngine(),[0]*10,confidence=.3)==[]
+    rejected=feed(GestureEngine(),[0]*10,confidence=.3)
+    assert all(e['kind']=='presence' and e['payload']['present'] is False for e in rejected)
 
 
 def test_crossing_two_hands_do_not_count_as_wave():
@@ -88,7 +89,7 @@ def test_pipeline_rejects_stale_before_detection_and_after_inference():
 
 
 def test_sink_rejects_remote_and_missing_token(monkeypatch):
-    monkeypatch.delenv('PET_API_TOKEN',raising=False)
+    monkeypatch.delenv('PET_VISION_TOKEN',raising=False)
     with pytest.raises(ValueError): LocalEventSink('https://example.com',token='fake')
     with pytest.raises(ValueError): LocalEventSink()
 
@@ -151,3 +152,27 @@ def test_local_http_delivery_preserves_contract():
         assert received==[('/v1/events','Bearer test-only',event)]
     finally:
         server.server_close()
+
+
+def test_presence_lease_refresh_is_fresh_and_stops_without_input():
+    engine=GestureEngine()
+    events=feed(engine,[0]*60)
+    presence=[e for e in events if e['kind']=='presence']
+    assert len(presence)>=6
+    assert all(e['payload']['present'] for e in presence)
+    assert all(b['observed_at']-a['observed_at']<=.9 for a,b in zip(presence,presence[1:]))
+    last=engine.last_timestamp
+    assert engine.update(Observation(last,(open_hand(),)),now=last+4)==[]
+    assert engine.last_timestamp==last
+
+
+def test_sink_selects_vision_role_token(monkeypatch):
+    monkeypatch.setenv('PET_API_TOKEN','operator-test-only')
+    monkeypatch.setenv('PET_VISION_TOKEN','vision-test-only')
+    assert LocalEventSink().token=='vision-test-only'
+
+
+def test_async_sink_is_rejected_instead_of_silently_lost():
+    async def async_sink(event): pass
+    with pytest.raises(TypeError,match='synchronous'):
+        Pipeline(None,GestureEngine(),async_sink)
