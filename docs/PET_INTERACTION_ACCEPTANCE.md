@@ -1,6 +1,6 @@
 # 宠物机器人基础交互独立验收
 
-日期：2026-09-23。状态：软件基线已测，新交互实现待固定版本验收，实机未验。本文由独立 QA 单写；不修改实现，不占音频、摄像头、COM/BLE，不启动或重启运行服务。
+日期：2026-09-23起，2026-09-24持续更新。状态：多个固定模块软件已验，跨模块修复/执行预算仍在复验；QA未执行实机。本文由独立 QA 单写；不修改实现，不占音频、摄像头、COM/BLE，不启动或重启运行服务。
 
 ## 基线与证据口径
 
@@ -61,6 +61,42 @@
 审查版本 `4204150a49e77b108779664519f56cf0b91be725`，PR：<https://github.com/kimniniup-creator/haifeng/pull/1>。在 QA 忽略目录解出完整固定提交，以隔离 Python 3.12.13 运行 `python -m pytest -q tests/test_pet_motion.py`：**25 passed**。没有设备连接。
 
 - 默认 dry_run、未批准映射、串行有界队列、UUID相关终态、POST返回前取消及停止未确认锁定已有 mock 覆盖。静态源码确认 transport 先建立 WebSocket 上下文再 POST；实际 daemon 订阅时序与网络断连仍未实机验证。
-- **P2待修：自然完成与取消竞态导致误锁定。** `MotionExecutor._stop` 在 stop HTTP 失败后不读取已缓冲的匹配 `move_completed`，直接永久标 `stop_unconfirmed`。所审阅的本地 SDK `stop_move_task` 对已完成并移除的 UUID 抛 KeyError，因此完成后恰好取消是合理触发路径。
+- **P2已修并软件复验：自然完成与取消竞态导致误锁定。** `MotionExecutor._stop` 在 stop HTTP 失败后不读取已缓冲的匹配 `move_completed`，直接永久标 `stop_unconfirmed`。所审阅的本地 SDK `stop_move_task` 对已完成并移除的 UUID 抛 KeyError，因此完成后恰好取消是合理触发路径。
 - 独立假设备复现：正常 start；stop(uuid) 先将匹配 `move_completed` 放进订阅队列，再抛 HTTP等价异常；cancel 后得到 `failed / stop_unconfirmed`、`available=False`，队列仍保留那条可信完成事件。复现只操作内存，不调用真实接口。
 - 修复要求：stop POST异常时，仍在明确期限内核对已订阅的匹配终态；没有确认则保持锁定，不能把HTTP错误一概视为成功。补测完成与取消交叉、无终态及错误UUID；交动作 owner 修改后复验。
+- 修复版本 `4679481b6aee580e5ce3148c6d63e837212d901e`：在同一个 stop_timeout 内，POST异常后继续等待匹配终态。独立运行该固定版本 **26 passed**；新增竞态用例通过，原无终态/失败/失联锁定用例仍通过。此项关闭，不覆盖后续新增微动作 profile，也未修改 approved。
+
+## 后端第一阶段审查（2026-09-24）
+
+固定版本 `443d3dc`：独立运行 `tests/test_pet_interaction.py tests/test_pet_motion.py` 得到 **48 passed**（包含旧动作4204150的25项，不能据此覆盖动作修复版本）。另有两项由独立补测发现、已交集成负责人修复：
+
+1. 带称呼的“啾啾停一下”被 `consume_voice` 分类为 wake_word，进而执行 attention，`stopped=False`。要求仅对匹配文本去称呼/标点，优先 stop/rest 后 wake，原始转写不改；停止状态下同句不得解除停止。
+2. 假设备停止失败时，MotionExecutor 已锁定 `stop_unconfirmed`，控制层仍只返回 `accepted / reason=stop / state=quiet`，状态也只显示 stopped=true。要求分列接收结果与 motion/voice 停止回执，公开执行器故障；未确认不能呈现为成功停止。
+
+以上均为内存假设备复现，没有访问运行中的 daemon 或语音服务。修复版本 `7e1407d` 独立运行 `tests/test_pet_interaction.py tests/test_pet_interaction_process.py`：**35 passed**，两项关闭。停止回执分列motion/voice，故障出现在state；带称呼停止先于唤醒判断。进程测试用QA独立TEMP/TMP隔离全局文件lease，验证跨端口重复实例拒绝，不争用生产lease。
+
+另在443d3dc通过真实 fake CLI 子进程与随机回环端口完成：首实例健康、同端口第二实例拒绝、首实例保持健康、正常lifespan关闭、端口可重新绑定、没有硬件模块导入。正常关闭由仅QA包装器设置 uvicorn.should_exit 驱动，不声称验证 Windows Ctrl+C 信号链；只终止自己创建的进程。
+
+## 视觉与语音固定版本审查（2026-09-24）
+
+视觉 `f4509397ad15bda5a19fbe76733faf08d004224f` / [PR #2](https://github.com/kimniniup-creator/haifeng/pull/2)：独立focused结果 **16 passed, 1 skipped**，缺本QA环境的模型/依赖而跳过真实模型用例；owner的17项及官方样图证据单列为转达，不合并为QA亲测。组合合成用例发现以下三项，交视觉/集成owner修复：
+
+- 连续6秒手可见只发一次presence(true)，视觉仍present=True，后端1.5秒TTL后present=False；需续租且不重复触发动作。
+- 默认sink读PET_API_TOKEN，后端该角色为operator；应使用PET_VISION_TOKEN，否则正常双token配置下视觉事件403。
+- README把async controller.handle直接传同步Pipeline；调用未await，因此不投递。需要明确异步管线或正确同步接线示例。
+
+修复 `71e4706a5d3fc8696d3f09f44ceb450136b78752` 独立 **20 passed**，三项模块缺陷关闭。QA新建Python3.12视觉环境按requirements-vision安装，26包兼容性检查通过；本地模型复制到忽略目录并核对SHA256 `fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1`，真实模型空白帧测试本次实际执行通过。没有开摄像头。后端“续租不重复行为、断流为unknown”组合仍待集成新版本；不能只凭视觉20测宣称跨模块通过。owner在71e4706文档记录DirectShow采到62帧，这是转达的现场证据，仍不等于真人wave/palm识别通过。
+
+语音 `23a6dc5d5a5706f6cbda9e7e14a211c0196d11ae`：从固定源码快照用既有独立voice环境运行 `python -m unittest discover -s patches/reachy_companion -p 'test_*.py' -q`，**26 tests OK**，不打开音频；新版mutex用例使用独立测试名。静态检查TurnGate入队与每个输出块复制共用身份锁，completed仍只指最后buffer提交，不证明可闻性。
+
+发现失败订阅清理缺口：Companion.emit发送异常/超时后只从clients移除，agent_clients和semantic_agent_connected仍保留。确定性假连接send_json抛异常后，两集合成员分别False/True；识别侧持续禁用local ack却不再向该连接发送final。已交语音owner修复统一清理/关闭失败连接并补异常与超时用例。
+
+修复版本 `bc7effdfbae2fdbc7d189d2c975cca9747ea91f9` 独立复验 **29 tests OK**，失败/超时清理与存在其他订阅者三项新增用例通过，缺口软件关闭。随后语音owner报告已在协调窗口将运行实例更新至bc7effd，并完成两轮真实订阅/断开重连，断开恢复local ack资格；这是owner转达证据，不是QA亲测，也不等于真人连续语音/重复回应通过。QA没有更新运行实例。
+
+## 1.5度微动作软件审查（2026-09-24）
+
+固定 `645c98efbb38867cf23287306b86acb6259e9683`：分别独立运行 `tests/test_pet_motion.py` **26 passed** 与 `tests/test_pet_motion_micro.py` **11 passed**。审查局部Y相对测量矩阵、配置1.5度/硬上限2度、最小1.5秒minjerk、独立映射及profile批准门、两段UUID串行与到位测量、取消只hold不回程、hold失败锁定；没有发现阻断总控计划的单次10秒TTL受限探测的软件问题。结论不等于实体通过，不授权生产approved或自动映射；实际设备窗口仍归总控和唯一动作owner。
+
+发现自动集成TTL冲突：该微动作默认最低完整预算6.75秒，语音事件最多2.5秒、视觉1.5秒直接传给submit会拒绝。总控已明确后续契约为保留原事件start deadline，另设execution_budget=10秒；旧事件不得刷新时间，新epoch/stop仍中断。须在后续固定版本验证三项：新鲜短TTL事件可在期限内开始并完成去回；排队过期事件不开始；开始后stop/epoch仍取消且不补回程。本版本未据此放行自动链路。
+
+动作owner后续报告第一次探测在snapshot矩阵校验阶段中止，没有goto/UUID。原始遥测的正交误差约6e-4，高于旧1e-4阈值；这不是动作到位失败，也不是微动作通过。矩阵容差及受限SO(3)投影将随新固定提交独立复验，QA不自行重试设备。
