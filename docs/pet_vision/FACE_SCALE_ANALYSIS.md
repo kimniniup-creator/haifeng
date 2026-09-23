@@ -34,3 +34,30 @@ The read-only daemon camera-spec endpoint exposes K with principal point approxi
 6. Pre-register acceptance limits and dataset sufficiency before collecting the high-resolution acceptance set. If results motivate threshold changes, use a further untouched set rather than relabeling this evaluation as improved generalization.
 
 No camera was opened for this analysis. Crying/playful recognition and live voice response remain outside its evidence.
+
+## Executed native-resolution availability check
+
+Following the coordinator's request, `tools/inspect_genki_resolution.py` downloaded the same pinned official archive into memory and decoded all4000 images only to inspect dimensions. It reproduced the original seed20260924 exclusion set of256 IDs. Among the remaining3744, maximum width was972 and maximum height480; **zero smile and zero non-smile images satisfy native width>=960 AND height>=540**. Full size metadata is in ignored `.runtime/genki-resolution-census.json`; no images/archive were written. This was a complete availability census, not another inference run on the first256.
+
+GENKI is the official source whose evaluation use had been checked in this task. Other mentioned datasets have not been cleared/acquired here; this result is not a claim that no suitable dataset exists anywhere. The permitted available source cannot support the proposed paired experiment. **There is currently no measured evidence that960 improves recognition, and no measured960-versus640 latency cost on real face inputs.** Raising resolution remains an unvalidated candidate. Production is unchanged.
+
+## Reproducible offline evaluator for future authorized native inputs
+
+`tools/run_pet_vision_resolution_eval.py` accepts a local manifest of untouched, already authorized native images with independent0/1 smile labels. It opens no camera. Manifest format (paths relative to its directory):
+
+```json
+[{"id":"sessionA-frame001","label":1,"path":"native-frame001.jpg"}]
+```
+
+Supply at least32 unique smile and32 unique non-smile images; this is a descriptive pilot size, not a safety or statistical acceptance guarantee. Separate people/sessions from exploratory material, avoid correlated adjacent-frame sampling, and confirm files are native rather than previously enlarged. The tool can enforce dimensions and duplicate content, but cannot establish consent, native provenance or independence from pixel dimensions alone. Ambiguous expressions should not be forced into binary ground truth.
+
+```powershell
+python tools/inspect_genki_resolution.py
+python tools/run_pet_vision_resolution_eval.py --manifest .runtime/authorized-native/manifest.json --model .runtime/models/face_landmarker.task --output .runtime/resolution-pilot-01.json
+```
+
+Before inference, the evaluator fixes32 per class with seed20260925 and writes a separate immutable preregistration with sample hashes, source sizes, crop coordinates, model/detector/evaluator hashes and unchanged thresholds. It rejects insufficient dimensions without inference. Both arms use exactly the same centered16:9 crop and production-default linear resize to640x360 and960x540, never upsampling. Processing order alternates between arms after blank warmups. A frame cropped from a non16:9 image is a paired offline comparison, not a replication of the DirectShow camera framing.
+
+The result reports confusion counts, positive/negative unknown, coverage, all-positive recall, quality reasons and per-sample outcomes for both arms. Timing includes inference and separately resize+inference p50/p95 and counts exceeding750ms. These timings exclude capture, decoding and transport; they cannot establish live source age, expiry rate or800ms stability. No production events or media outputs are emitted. Outputs remain under ignored `.runtime`; an existing run filename cannot be overwritten.
+
+Validation completed:14 focused tests passed, including rejection of972x480/959x540/960x539 inputs and matched centered crop geometry. The real model processed a synthetic blank1920x1080 frame at both640 and960; both returned unknown/no-face. The CLI's insufficient-sample path returned eligible negative1/positive0 and `inference_performed:false`. These are implementation checks, not facial-recognition or latency evidence. No high-resolution labeled face set was available, so a paired facial experiment was deliberately not fabricated.
