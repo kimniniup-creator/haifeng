@@ -95,7 +95,7 @@ class TurnGate:
             reason = None
             if not self.matches(identity): reason = "stale_turn"
             elif self.muted: reason = "muted"
-            elif self.clock() > deadline: reason = "expired"
+            elif self.clock() >= deadline: reason = "expired"
             elif response_id in self.seen: reason = "duplicate"
             elif self.answered and not proactive: reason = "already_answered"
             elif self.pending is not None: reason = "already_speaking"
@@ -121,8 +121,8 @@ class TurnGate:
                 self._receipt(identity, response_id, "dropped", "proactive_guard")
                 self.pending = None
                 return
-            if self.muted or not self.matches(identity) or self.clock() > deadline:
-                reason = "expired" if self.clock() > deadline else "stale_turn"
+            if self.muted or not self.matches(identity) or self.clock() >= deadline:
+                reason = "expired" if self.clock() >= deadline else "stale_turn"
                 self._receipt(identity, response_id, "dropped", reason)
                 self.pending = None
                 return

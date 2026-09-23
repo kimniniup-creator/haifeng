@@ -67,6 +67,24 @@ class ProactiveTests(unittest.TestCase):
         self.assertIsNone(self.pet.gate.pending)
         self.assertEqual(self.p.submit(b)['reason'],'disconnected')
 
+    def test_exact_deadline_stops_callback(self):
+        self.p.submit(self.body())
+        deadline=self.pet.gate.pending[3]
+        out=np.ones((320,2)); self.pet.gate.render(out)
+        self.assertTrue(np.any(out))
+        self.now=deadline; self.pet.last_capture=self.now
+        self.p.connection['heartbeat']=self.now
+        self.pet.gate.render(out)
+        self.assertFalse(np.any(out))
+        statuses=[]
+        while not self.pet.gate.events.empty(): statuses.append(self.pet.gate.events.get_nowait())
+        self.assertEqual(statuses[-1]['reason'],'expired')
+
+    def test_exact_deadline_rejects_enqueue(self):
+        from pet_audio import mechanical_voice
+        self.assertFalse(self.pet.gate.enqueue(self.pet.gate.identity(),'expired',mechanical_voice(),self.now))
+        self.assertIsNone(self.pet.gate.pending)
+
     def test_heartbeat_timeout_stops_callback(self):
         self.p.submit(self.body());self.now+=1.6;self.pet.last_capture=self.now
         out=np.ones((320,2));self.pet.gate.render(out)
