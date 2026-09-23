@@ -205,6 +205,17 @@ Operational note: VS Code restarted at 04:12 and took down every service parente
 to its old terminals, including the Reachy daemon on 8000, voice 7860,
 pet_interaction 8091 and legacy bridge 8088. The photo Agent survived because it
 was relaunched detached through Win32_Process Create with the new
-start_detached.cmd. The official Reachy Mini Control client was restarted as the
-sole daemon owner; the other three services belong to other owners and were not
-restarted here.
+start_detached.cmd; the first two end-to-end runs were recorded before that
+teardown.
+
+Daemon recovery: launching the official Reachy Mini Control client brought up its
+window but no daemon and no listening port for about nine minutes, so that client
+was closed again and the daemon was started directly with the command line the
+client itself had used. The stored command line carries a \?\ extended-length
+prefix that cmd mangles into a relative path; the plain path works. The daemon
+came back in about 20 seconds with state running, motors enabled, 32Hz control
+loop and backend_status.ready still false, which is the same stale field the
+readiness fix handles. A third full run on the restored environment completed in
+19.1s: curiosity -> [[0,6],[0,0]] -> motion completed, residual roll +0.003 rad.
+Voice 7860, pet_interaction 8091 and legacy bridge 8088 belong to other owners
+and were deliberately not restarted here.

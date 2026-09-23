@@ -116,3 +116,27 @@ false，各有回归测试。
 `start_detached.cmd`：切到工程目录、以 `.venv` 解释器运行 `-m agent_app`、
 日志追加到已忽略的 `data\service.log`。需要脱离终端时用
 `Invoke-CimMethod Win32_Process Create` 调用它，进程不再挂在终端进程树下。
+
+### 当天的环境事故与恢复（记录，便于复现）
+
+04:12 VS Code 整体重启，把挂在旧终端进程树下的服务全部带走：Reachy daemon 8000、
+语音 7860、pet_interaction 8091、旧 bridge 8088。本 Agent 因为改用
+`Win32_Process Create` + `start_detached.cmd` 脱离终端启动而存活，
+前两次端到端证据是在该次重启之前取得的。
+
+恢复 daemon 的可复现步骤：先启官方客户端，它开出窗口但九分钟内既未派生 daemon
+也未监听任何端口，于是关闭客户端，直接用客户端原本那条命令行启动 daemon：
+
+```
+"C:\Users\12246\AppData\Local\Reachy Mini Control\.venv\Scripts\python.exe" ^
+  "C:\Program Files\Reachy Mini Control\scripts\avast_ssl_fix.py" ^
+  --desktop-app-daemon --no-wake-up-on-start --preload-datasets
+```
+
+进程表里记录的原始命令行带 `\?\` 扩展长度前缀，经 cmd 规范化会变成相对路径并
+报 Errno 22，去掉该前缀即可。约 20 秒后 daemon 恢复 running，
+`backend_status.ready` 仍为 false，正是本次就绪判定修复所处理的那个陈旧字段。
+
+恢复后第三次完整运行 `e2e-restored-04`：19.1 秒完成，curiosity →
+`[[0,6],[0,0]]` → `motion: completed`，残差 roll +0.003 rad。
+语音、pet_interaction 和旧 bridge 属于其他 owner，未在此重启。
