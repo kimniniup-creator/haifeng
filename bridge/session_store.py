@@ -6,7 +6,7 @@ import threading
 import uuid
 
 
-ACTIVE_STATUSES = ("queued", "capturing", "media_ready", "thinking", "answer_ready")
+ACTIVE_STATUSES = ("queued", "capturing", "media_ready", "thinking", "answer_ready", "responding")
 
 
 def now() -> str:
@@ -56,9 +56,11 @@ class SessionStore:
     def sessions(self, limit: int = 100) -> list[dict]:
         with self.lock:
             rows = self.connection.execute("""
-                SELECT s.session_id, s.name, s.created_at, COUNT(m.id) AS message_count, MAX(m.created_at) AS last_activity_at
-                FROM sessions s LEFT JOIN messages m ON m.session_id=s.session_id
-                GROUP BY s.session_id ORDER BY COALESCE(MAX(m.created_at), s.created_at) DESC LIMIT ?
+                SELECT s.session_id, s.name, s.created_at,
+                  (SELECT COUNT(*) FROM messages m WHERE m.session_id=s.session_id) AS message_count,
+                  COALESCE((SELECT MAX(created_at) FROM messages m WHERE m.session_id=s.session_id),
+                           (SELECT MAX(created_at) FROM images i WHERE i.session_id=s.session_id), s.created_at) AS last_activity_at
+                FROM sessions s ORDER BY last_activity_at DESC LIMIT ?
             """, (limit,)).fetchall()
         return [dict(row) for row in rows]
 
@@ -66,6 +68,14 @@ class SessionStore:
         with self.lock:
             row = self.connection.execute("SELECT session_id,name,created_at FROM sessions WHERE session_id=?", (session_id,)).fetchone()
         return dict(row) if row else None
+
+    def images(self, session_id: str) -> list[dict]:
+        with self.lock:
+            rows = self.connection.execute("""
+                SELECT image_id,source,captured_at,width,height,mime_type,byte_size,sha256
+                FROM images WHERE session_id=? ORDER BY captured_at ASC
+            """, (session_id,)).fetchall()
+        return [dict(row) for row in rows]
 
     def active_request_ids(self, session_id: str) -> list[str]:
         placeholders = ",".join("?" for _ in ACTIVE_STATUSES)
@@ -137,6 +147,9 @@ class SessionStore:
         with self.lock, self.connection:
             self.connection.execute("INSERT INTO messages(session_id,request_id,role,text,image_id,created_at) VALUES(?,?,?,?,?,?)",
                                     (session_id, request_id, role, text, image_id, now()))
+            if role == "user" and text.strip():
+                self.connection.execute("UPDATE sessions SET name=? WHERE session_id=? AND (name IS NULL OR TRIM(name)='')",
+                                        (text.strip()[:30], session_id))
 
     def history(self, session_id: str, limit: int = 12) -> list[dict]:
         with self.lock:

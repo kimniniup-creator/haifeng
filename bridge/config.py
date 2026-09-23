@@ -38,6 +38,7 @@ class Settings:
     model_base_url: str = os.getenv("MODEL_BASE_URL", "")
     model_api_key: str = os.getenv("MODEL_API_KEY", "")
     vision_model: str = os.getenv("VISION_MODEL", "")
+    model_settings_managed: bool = False
     tts_enabled: bool = _boolean("TTS_ENABLED")
 
     @property
@@ -64,8 +65,9 @@ class Settings:
                 saved = json.loads(self.settings_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             saved = {}
+        self.model_settings_managed = bool(saved.get("model_settings_managed"))
         for key in ("model_base_url", "model_api_key", "vision_model"):
-            if not getattr(self, key) and isinstance(saved.get(key), str):
+            if (self.model_settings_managed or not getattr(self, key)) and isinstance(saved.get(key), str):
                 setattr(self, key, saved[key])
         if not self.bridge_token or self.bridge_token == "local-development-token":
             token = saved.get("bridge_token")
@@ -75,7 +77,8 @@ class Settings:
     def _persist(self, previous: dict | None = None) -> None:
         value = dict(previous or {})
         value.update({"bridge_token": self.bridge_token, "model_base_url": self.model_base_url,
-                      "model_api_key": self.model_api_key, "vision_model": self.vision_model})
+                      "model_api_key": self.model_api_key, "vision_model": self.vision_model,
+                      "model_settings_managed": self.model_settings_managed})
         temporary = self.settings_path.with_suffix(".tmp")
         temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(temporary, self.settings_path)
@@ -89,6 +92,7 @@ class Settings:
         self.model_base_url, self.vision_model = base_url, model.strip()
         if api_key is not None and api_key.strip():
             self.model_api_key = api_key.strip()
+        self.model_settings_managed = True
         self._persist()
 
     def model_status(self) -> dict:
