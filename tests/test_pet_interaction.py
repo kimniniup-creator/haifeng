@@ -281,6 +281,26 @@ def test_minimal_language_intents(text, intent, sound):
     run(scenario())
 
 
+@pytest.mark.parametrize("text", ["抬头", "啾啾，抬一下头！", "揪揪抬起头", "舅舅抬头看看"])
+def test_look_up_keeps_distinct_semantic_and_original_identity(text):
+    async def scenario():
+        clock = Clock(); pet = PetController(clock=clock)
+        await pet.voice_turn("voice1", 1, 1)
+        packet = speech(clock); packet["payload"] = {"text": text}
+        receipt = await pet.handle(packet)
+        await pet.drain()
+        decision = pet.decisions[receipt["decision_id"]]
+        assert decision["intent"] == decision["semantic_id"] == "look_up"
+        assert decision["motion"]["status"] == "dry_run"
+        assert decision["start_deadline"] == packet["observed_at"] + packet["ttl_seconds"]
+        assert decision["input_id"] == "input1" and decision["turn_id"] == 1
+        assert pet.voice.calls[0]["semantic_id"] == "ack"
+        assert packet["payload"]["text"] == text
+        assert (await pet.handle(packet))["status"] == "duplicate"
+        await pet.close()
+    run(scenario())
+
+
 @pytest.mark.parametrize("text", ["啾啾停一下", "揪揪，停下！", "舅舅安静", "啾啾停一下不要再说了"])
 def test_named_stop_precedes_wake_and_never_emits_sound(text):
     async def scenario():
