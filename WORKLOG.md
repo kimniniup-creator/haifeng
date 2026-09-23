@@ -161,3 +161,50 @@ voice+proactive subscriptions true, errors null, heartbeat alive beyond2s, captu
 fresh/dropped0. No test playback or visual event. Camera remains stopped; denied
 producer startup was not retried. Source/runtime/one manual-entry evidence recorded
 in SMILE_MAINTENANCE_PLAN; physical perception/audio acceptance still outstanding.
+
+## Upstream photo Agent deployment — 2026-09-24
+
+Imported upstream b078189 local_agent and emotion contract into an isolated branch.
+Windows Python 3.12 environment installed with upstream tested constraints. Real E06
+capture and DeepSeek Flash photo analysis succeeded via explicitly configured JSON
+mode and thinking disabled. Added scene-response emotion evidence and deterministic
+head-gesture mapping, none/low-quality suppression, local Python BLE adapter and
+mobile layout fixes. 41 tests passed. Desktop/mobile screenshots inspected; no JS
+errors or horizontal overflow. Deployment details: local_agent/DEPLOYMENT.md.
+Physical execution remains blocked by native ready export plus ~10-degree joint
+tracking discrepancy; native runtime untouched and shared motion owner notified.
+
+Follow-up: Kim oriented E06 and authorized a new capture. Model saw a person holding
+a playing card; scene response curiosity. Removed blanket limited-quality suppression
+when evidence exists and no recapture is needed. Same-photo image job independently
+confirmed curiosity -> roll6deg -> neutral, with ROBOT_NOT_READY clearly displayed.
+55 regression tests plus one independent motor-gate test passed. Hardware motion
+remains disabled independently of future daemon readiness repair. Single PID45980
+listens on loopback8765; screenshot QA refreshed for the actual second scene.
+
+## Photo emotion to robot motion closed end to end — 2026-09-24
+
+Kim authorized small physical validation, so the last leg of the upstream photo
+Agent is now proven rather than gated. Root cause of ROBOT_NOT_READY was the
+readiness predicate, not the robot: native daemon 1.8.0 never refreshes
+backend_status.ready, while state=running, motors enabled, error null and the
+control loop ran at 32Hz. Readiness now falls back to live control-loop evidence
+and reports backend_ready plus ready_basis separately.
+
+Evidence: authorized single segment commanded 3 degrees pitch (0.052360 rad) and
+measured 0.052604 rad with move_started then move_completed. Two full runs from a
+real E06 photo produced curiosity with visible evidence, mapped head_gesture
+[[0,6],[0,0]] and motion completed via daemon_move_events. 63 tests pass.
+
+Added an explicit ROBOT_SPEECH_ENABLED gate, default true upstream and false on
+this machine, because robot.play calls /api/media/acquire and would take the
+daemon audio lease from the voice owner on 7860. Speech reports suppressed, not
+failed. Precision, audibility and wider emotion coverage remain unaccepted.
+
+Operational note: VS Code restarted at 04:12 and took down every service parented
+to its old terminals, including the Reachy daemon on 8000, voice 7860,
+pet_interaction 8091 and legacy bridge 8088. The photo Agent survived because it
+was relaunched detached through Win32_Process Create with the new
+start_detached.cmd. The official Reachy Mini Control client was restarted as the
+sole daemon owner; the other three services belong to other owners and were not
+restarted here.

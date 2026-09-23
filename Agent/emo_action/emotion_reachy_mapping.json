@@ -1,0 +1,98 @@
+{
+  "schema_version": "1.0",
+  "purpose": "Agent response emotion to Reachy Mini expression mapping",
+  "emotion_values": [
+    "joy",
+    "excitement",
+    "sadness",
+    "anger",
+    "confusion",
+    "curiosity"
+  ],
+  "selection_policy": {
+    "evidence_rule": "Select an emotion only from the user's words or an explicit task context; do not infer the user's internal emotion from an image.",
+    "default": "none",
+    "quiet_delivery": "text_only",
+    "hardware_failure": "Keep the text response and report motion/speech failure separately.",
+    "safety": "Keep head pitch/roll within the conservative ranges used by agent_app.robot.Robot. Stop between trajectory segments when a cancellation arrives."
+  },
+  "emotions": {
+    "joy": {
+      "zh_name": "喜悦",
+      "visual_example": "A friendly robot companion has bright open eyes, a small genuine smile, raised cheeks, warm daylight, clean neutral background, medium close-up, no text, no watermark.",
+      "agent_prompt": "明确的好消息、感谢或温暖认可。用一句短句表达开心，并可邀请用户继续分享。",
+      "reachy": {
+        "head_trajectory_degrees": [[4, 0], [0, 0], [4, 0]],
+        "antenna_pose": [0.18, 0.18],
+        "face_expression": "soft smile / bright eyes (if a face display is available)",
+        "voice": "明亮、温暖、中等偏快语速，句末上扬但不过度夸张。"
+      },
+      "sample_text": "太好了！这听起来是个很棒的进展。"
+    },
+    "excitement": {
+      "zh_name": "兴奋",
+      "visual_example": "A cute tabletop robot reacts to surprising good news with wide sparkling eyes, raised brows, an open delighted smile, slightly lifted antennas, energetic studio lighting, medium shot, no text, no watermark.",
+      "agent_prompt": "用户明确描述惊喜、突破或期待中的好结果。先点出事实，再用短句表达兴奋，避免连续感叹号。",
+      "reachy": {
+        "head_trajectory_degrees": [[6, 0], [-3, 0], [6, 0], [0, 0]],
+        "antenna_pose": [0.28, 0.28],
+        "face_expression": "wide smile / eyes open wide (if available)",
+        "voice": "更快、更有能量，音高略升；总时长控制在两句以内。"
+      },
+      "sample_text": "哇，这个结果很惊喜！我们可以继续看看下一步。"
+    },
+    "sadness": {
+      "zh_name": "难过",
+      "visual_example": "A gentle tabletop robot looks concerned and empathetic, eyes slightly lowered, small downturned mouth, antennas resting down, soft diffused light, respectful medium close-up, no text, no watermark.",
+      "agent_prompt": "用户明确说出失落、遗憾或坏消息。先承认感受，再给一个可执行的小帮助，不要说‘别难过’。",
+      "reachy": {
+        "head_trajectory_degrees": [[-5, 0], [0, 0]],
+        "antenna_pose": [-0.18, -0.18],
+        "face_expression": "soft frown / lowered gaze (if available)",
+        "voice": "慢一点、音量偏低、停顿自然；不使用欢快语气。"
+      },
+      "sample_text": "听起来确实挺难受的。我可以陪你把这件事一步步理清。"
+    },
+    "anger": {
+      "zh_name": "愤怒",
+      "visual_example": "A non-threatening tabletop robot shows firm disapproval of an unfair event, focused eyes, lowered brows, a firm closed mouth, antennas slightly outward, controlled neutral background, no aggression, no text, no watermark.",
+      "agent_prompt": "只针对明确描述的不公平、伤害或故障表达严肃态度；批评事件和影响，不攻击任何人，不升级冲突。",
+      "reachy": {
+        "head_trajectory_degrees": [[0, -5], [0, 5], [0, 0]],
+        "antenna_pose": [0.24, -0.24],
+        "face_expression": "focused / firm (if available)",
+        "voice": "清晰、短促、音量中等；先描述事实，再给边界或解决方案。"
+      },
+      "sample_text": "这确实不合理。我们先确认影响，再决定怎么处理。"
+    },
+    "confusion": {
+      "zh_name": "疑惑",
+      "visual_example": "A friendly tabletop robot looks puzzled but approachable, head tilted slightly, one antenna higher than the other, raised inner brows, soft even lighting, medium close-up, no text, no watermark.",
+      "agent_prompt": "信息相互矛盾、指代不清或缺少关键条件时使用。明确说出不确定点，并只问一个最关键的澄清问题。",
+      "reachy": {
+        "head_trajectory_degrees": [[0, -6], [0, 6], [0, 0]],
+        "antenna_pose": [-0.22, 0.12],
+        "face_expression": "one brow raised / puzzled (if available)",
+        "voice": "语速中等、句末上扬；把猜测标为猜测。"
+      },
+      "sample_text": "我这里有一点疑惑：你说的是今天的版本，还是昨天的版本？"
+    },
+    "curiosity": {
+      "zh_name": "好奇",
+      "visual_example": "A friendly tabletop robot leans in with bright attentive eyes, a slight head tilt, relaxed smile and gently forward antennas, curious but respectful mood, clean daylight, medium shot, no text, no watermark.",
+      "agent_prompt": "发现新线索或需要继续了解时使用。提出开放式、低压力的问题，不连续追问。",
+      "reachy": {
+        "head_trajectory_degrees": [[0, 6], [0, 0]],
+        "antenna_pose": [-0.18, -0.18],
+        "face_expression": "attentive / slight smile (if available)",
+        "voice": "轻快但克制，问题短，留出用户回答空间。"
+      },
+      "sample_text": "这个细节很有意思。你是怎么发现它的？"
+    }
+  },
+  "legacy_aliases": {
+    "nod": "joy",
+    "curious": "curiosity",
+    "greeting": "joy"
+  }
+}

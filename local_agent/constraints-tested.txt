@@ -1,0 +1,16 @@
+# Tested on Linux/Python 3.12; Windows SAPI packages still require host verification.
+fastapi==0.115.14
+starlette==0.46.2
+uvicorn==0.53.0
+openai==2.54.0
+pydantic==2.13.5
+httpx==0.28.1
+httpcore==1.0.9
+anyio==4.15.1
+python-dotenv==1.2.3
+Pillow==12.3.0
+python-multipart==0.0.32
+filelock==3.32.7
+websockets==16.1.1
+pytest==9.1.1
+socksio==1.0.0
