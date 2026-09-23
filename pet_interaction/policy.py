@@ -21,6 +21,7 @@ class RulePolicy:
             if candidate in phrases:
                 return {"greeting": (intent, "greeting", "happy"),
                         "attention": (intent, "attention", "curious"),
+                        "look_up": (intent, "look_up", "ack"),
                         "wake": (intent, "attention", "curious"),
                         "stop": (intent, "stop", None),
                         "quiet": (intent, "quiet", None),
