@@ -122,7 +122,10 @@ class PetController:
             resting = self.rest_requested
             self.stopped = resting or reason in {"interrupt", "stop", "manual_preview", "audition", "muted", "mute", "overflow"}
             self.state = "resting" if resting else ("quiet" if self.stopped or reason == "snapshot" else "attention")
-            await self.motion.cancel()
+            if current and current["session_id"] != session_id:
+                await self.motion.invalidate_baseline()
+            else:
+                await self.motion.cancel()
             return {"status": "accepted"}
 
     async def disconnect_voice(self):
@@ -134,7 +137,7 @@ class PetController:
             self.voice_busy_until = 0
             self._invalidate()
             self.state = "resting" if self.rest_requested else "quiet"
-            await self.motion.cancel()
+            await self.motion.invalidate_baseline()
 
     async def handle(self, raw):
         now = self.clock()

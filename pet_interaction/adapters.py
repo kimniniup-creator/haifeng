@@ -20,6 +20,9 @@ class FakeMotion:
     async def cancel(self):
         self.cancel_count += 1
 
+    async def invalidate_baseline(self):
+        await self.cancel()
+
     async def close(self):
         await self.cancel()
 

@@ -61,6 +61,24 @@ operator kind 为 stop/rest/wake；`POST /v1/stop` 是 operator 紧急停止入�
 
 ## 验证与边界
 
+### 显式抬头与返回（默认仅 dryrun）
+
+`抬头/抬一下头/抬起头/抬头看看`（可带啾啾别称）选择独立 `look_up`，不复用关注动作。
+`回到刚才的位置/回到抬头前的位置/回到原来的位置` 选择 `return_to_start`。
+只有动作负责人回执 `completed/holding_verified` 的 baseline_id 可保存，绑定真实认证语音 session；
+返回仍需当前 epoch/input_id 验证。同 session 的新 utterance epoch 保留已确认基线；
+源事件时间起至多 120 秒，重复抬头不续租。dryrun 不生成真实基线，返回无 ID 时拒绝。
+
+真实 session 变更或语音断连会调用动作负责人的 `invalidate_baseline()`，清公开 ID 并保留私有原点、
+锁住后续姿态动作，避免首个动作回执尚未送达就换会话后重新签发旧原点。`already_looking_up` 回执
+不能在新 session 重新绑定旧 ID。显式返回可解除普通 stop 的逻辑暂停，但不自动唤醒 rest 状态。
+停止失败清上层基线，动作层另行锁定故障；成功返回清上层基线。
+
+姿态锁没有普通语音解锁入口。仅动作负责人可调用 `review_reset_posture_baseline()` 做只读恢复检查：
+无活动/队列/故障，可信零偏移遥测、目标/实际关节一致，且实测已回原私有起点并稳定至少一秒。
+不满足则不解锁、不移动；重建执行器不等于已物理复核。详见 `pet_motion/LOOK_UP.md`。
+规则识别、离线组合测试与实体抬头验收分别记录；所有 mapping/profile approved 仍为 false。
+
 ```powershell
 python -m pytest tests/test_pet_interaction.py tests/test_pet_interaction_process.py tests/test_pet_motion.py -q
 ```
