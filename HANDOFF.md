@@ -1,5 +1,13 @@
 # 海风交接
 
+## 2026-09-23 产品方向更新：《带上她的眼睛》
+
+- 用户明确家中实体为 Reachy Mini，眼镜无 3D 投影、无麦克风；目标是外出主动拍照分享，并从随身 M5 得到针对照片的角色回应。
+- 用户接受手机仅在口袋提供热点，主流程不掏手机。M5 是同一角色的反馈窗口，不只显示上传回执。
+- 最新讨论稿：docs/带上她的眼睛-PRD-v0.1.md。旧 PRODUCT.md 是此前桌边回顾原型记录，不代表最新目标；本轮不改运行程序。
+- 参考已从 D:\forbetter 的陪伴契约与气质画像读取，不读取私人记忆。
+- 用户确认 M5 为“S3”，授权真机检查。唯一硬件子任务 m5_feedback 负责型号、现有固件和可逆输出核验，报告 docs/M5_S3_HARDWARE_CHECK.md；主任务负责 PRD 与统一提交。不得因芯片 USB ID 推定具体 M5 型号，不得把电脑 USB 演示当外出验收。
+
 ## 权威位置
 - 工作区：D:\海风。origin：https://github.com/kimniniup-creator/haifeng （private）。
 - upstream：timesbye/Robot_glasses，继承V2 c968c62。
@@ -65,3 +73,8 @@ Luma没有现场发现；上游有E06-0055真机验证记录，本机未复验�
 - **补丁两处缺陷待修（未动手）**：9 个情绪动作恒 500（nextafter 越界，含 confused1/laughing2/proud1/welcoming1）；ReturningMove.sound_path=None 使全部情绪配音不响。修法各一行，写在 Word 文档 6.2 / 6.3。
 - **最高优先级阻塞**：C:\Users\12246\AppData\Local\Reachy Mini Control 目录已从磁盘消失，daemon/对话应用/helper 仍在跑内存镜像。**重启客户端或电脑前先备份 apps_venv 包清单与人格文件**，否则很可能需要重走 bootstrap 且补丁丢失。本轮因此未关客户端、未重装补丁。
 - 唯一未闭环的验收项仍是扬声器现场可闻性，只能由现场的人确认。
+
+## 《带上她的眼睛》M5 核验收口
+- 型号已确认为 M5StickS3 K150，现有 reading-pet 固件；135×240 显示驱动 ready，短音软件播放流程完成，实体显示与可闻性未验。
+- 无内置震动；照片回应显示命令尚未实现，M5 BLE 眼镜采集与热点上行尚未联调。详见 docs/M5_S3_HARDWARE_CHECK.md。
+- 下一步在本项目隔离复用现有模块、备份并核验设备恢复路径后实现回应接口；不直接覆盖 reading-pet 正式源码。当前仅 PRD 与真机核验完成，非外出产品交付。

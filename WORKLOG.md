@@ -82,3 +82,10 @@
 - **阻塞（最高优先级，推断未验证）**：C:\Users\12246\AppData\Local\Reachy Mini Control 目录已从磁盘消失，但 daemon(38256)/对话应用(39340)/helper(36616) 仍从该路径的内存镜像运行。Program Files 安装体仍在。推断重启客户端或电脑后该环境（含补丁）会丢失，需重走 bootstrap。因此本轮不关客户端、不重装补丁，先报告。
 - 仍待用户现场确认：扬声器可闻性。本轮已发 impatient1.wav / count.wav / wake_up.wav 及情绪配音，均 200；EOS/200 不是可闻证据。
 - 原始响应在 .runtime/：emotion-move-probe.json、emotion-move-probe2.json、emotion-move-validation.json、emotion-with-sound.json、guard-transition-math.json、conversation-app-rpc.json、conversation-app-tools.json（不进 Git）。
+
+## 2026-09-23 《带上她的眼睛》PRD 讨论
+- 依据用户新方向编写 docs/带上她的眼睛-PRD-v0.1.md，家中实体为 Reachy Mini，外出反馈由随身 M5 承接。
+- 已读取本机 forbetter 的陪伴契约及气质画像，未读取私人记忆。用户确认手机可只提供热点。
+- 已确认本仓库 main、origin 为 kimniniup-creator/haifeng、PRIVATE；本轮不另建项目、不改运行程序。
+- 已委派唯一 M5 硬件子任务，用户随后授权 S3 真机检查；输出证据待整合。不以串口枚举或上游规格宣称真机输出成功。
+- 子任务最终识别为 M5StickS3 K150，与 reading-pet 现有构建对应。显示驱动报告 135×240/ready；600ms 短音请求从 started 到 completed，现场可闻未确认。没有内置震动；未刷机，尚不能显示新的照片回应。结果已并入 PRD 和真机报告。
