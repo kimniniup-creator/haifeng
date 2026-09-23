@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 from urllib.request import Request, build_opener, HTTPRedirectHandler, ProxyHandler
 import json
 import os
+import inspect
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,8 @@ class Frame:
 
 class Pipeline:
     def __init__(self, detector, engine, sink, clock=time):
+        if inspect.iscoroutinefunction(sink) or inspect.iscoroutinefunction(getattr(sink,'__call__',None)):
+            raise TypeError('Pipeline sink must be synchronous; await returned events in the owner event loop')
         self.detector, self.engine, self.sink, self.clock = detector, engine, sink, clock
 
     def process(self, frame: Frame):
@@ -25,7 +28,11 @@ class Pipeline:
         observation = self.detector.detect(frame.bgr, t)
         events = self.engine.update(observation, now=self.clock())
         for event in events:
-            self.sink(event)
+            result = self.sink(event)
+            if inspect.isawaitable(result):
+                if inspect.iscoroutine(result):
+                    result.close()
+                raise TypeError('Pipeline sink returned an awaitable; use a synchronous collector')
         return events
 
 
@@ -40,9 +47,9 @@ class LocalEventSink:
         if parsed.scheme != "http" or parsed.hostname not in ("127.0.0.1", "::1", "localhost") or parsed.username or parsed.password:
             raise ValueError("Vision events may only go to a local HTTP backend")
         self.url = url
-        self.token = token if token is not None else os.environ.get("PET_API_TOKEN")
+        self.token = token if token is not None else os.environ.get("PET_VISION_TOKEN")
         if not self.token:
-            raise ValueError("PET_API_TOKEN is required for event delivery")
+            raise ValueError("PET_VISION_TOKEN is required for event delivery")
         self.opener = build_opener(ProxyHandler({}), NoRedirect)
 
     def __call__(self, event):

@@ -60,6 +60,7 @@ class GestureEngine:
         self.session_id = session_id or str(uuid4())
         self.last_timestamp = float('-inf')
         self.first_seen = self.last_seen = None
+        self.absent_since = None
         self.present = False
         self.tracks = []
         self.last_event = {}
@@ -76,6 +77,7 @@ class GestureEngine:
     def _clear(self):
         self.tracks.clear()
         self.first_seen = self.last_seen = None
+        self.absent_since = None
 
     def update(self, observation: Observation, *, now: float):
         t = observation.observed_at
@@ -90,21 +92,20 @@ class GestureEngine:
         if not hands:
             self.tracks.clear()
             self.first_seen = None
-            if self.last_seen is not None and t - self.last_seen >= self.leave_after:
-                if self.present:
-                    events.append(self._event("presence", t, 1., {"present": False, "basis": "hand"}))
-                self.present = False
-                self._clear()
-            # If a long frame gap already cleared last_seen, a fresh empty frame establishes absence.
-            elif self.present and self.last_seen is None:
+            if self.absent_since is None:
+                self.absent_since = t
+            if t - self.absent_since >= self.leave_after and (self.present or t-self.last_event.get('presence',float('-inf'))>=.75):
                 self.present = False
                 events.append(self._event("presence", t, 1., {"present": False, "basis": "hand"}))
             return events
+        self.absent_since = None
         self.last_seen = t
         if self.first_seen is None:
             self.first_seen = t
         if not self.present and t - self.first_seen >= self.stable:
             self.present = True
+            events.append(self._event("presence", t, min(h.confidence for h in hands), {"present": True, "basis": "hand"}))
+        elif self.present and t-self.last_event.get('presence',float('-inf'))>=.75:
             events.append(self._event("presence", t, min(h.confidence for h in hands), {"present": True, "basis": "hand"}))
         remaining = [tr for tr in self.tracks if t - tr.last <= .25]
         tracks = []

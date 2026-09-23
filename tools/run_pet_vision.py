@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--demo", action="store_true")
     parser.add_argument("--provider", help="module:function yielding timestamped frames")
     parser.add_argument("--model", default=".runtime/models/hand_landmarker.task")
-    parser.add_argument("--send", action="store_true", help="deliver metadata to local backend (requires PET_API_TOKEN)")
+    parser.add_argument("--send", action="store_true", help="deliver metadata to local backend (requires PET_VISION_TOKEN)")
     args = parser.parse_args()
     if bool(args.demo) == bool(args.provider):
         parser.error("choose exactly one of --demo or --provider")
