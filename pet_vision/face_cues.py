@@ -33,9 +33,10 @@ class FaceCueEngine:
     Single-face quality gating precedes every cue. Insufficient evidence is
     unknown. All thresholds are heuristics requiring target-camera validation.
     """
-    def __init__(self, *, session_id=None, confidence=.7):
+    def __init__(self, *, session_id=None, confidence=.7, extended=False):
         self.session_id=session_id or str(uuid4())
         self.confidence=confidence
+        self.extended=extended
         self.last_timestamp=float('-inf')
         self.max_age=.75
         self.track_id=None
@@ -148,7 +149,44 @@ class FaceCueEngine:
         if left is None or right is None:
             self.candidates.clear()
             return []
-        return self._rule('smile',face,t,active=min(left,right)>=.55,
-                          released=max(left,right)<=.35,duration=.8,
-                          thresholds={'mouthSmileLeft':.55,'mouthSmileRight':.55},
-                          keys=('mouthSmileLeft','mouthSmileRight'))
+        smile=self._rule('smile',face,t,active=min(left,right)>=.55,
+                         released=max(left,right)<=.35,duration=.8,
+                         thresholds={'mouthSmileLeft':.55,'mouthSmileRight':.55},
+                         keys=('mouthSmileLeft','mouthSmileRight'))
+        if not self.extended:
+            return smile
+        # Extended names remain observation-only until the response owner adds an
+        # explicitly reviewed policy. They do not establish laughter or tears.
+        c=face.coefficients
+        def enough(keys):
+            return all(k in c for k in keys)
+        laugh_keys=('mouthSmileLeft','mouthSmileRight','jawOpen','cheekSquintLeft','cheekSquintRight')
+        cry_keys=('browInnerUp','mouthFrownLeft','mouthFrownRight','eyeSquintLeft','eyeSquintRight')
+        play_keys=('mouthPucker','browOuterUpLeft','browOuterUpRight')
+        laugh_active=(enough(laugh_keys) and min(left,right)>=.65 and c['jawOpen']>=.35
+                      and min(c['cheekSquintLeft'],c['cheekSquintRight'])>=.2)
+        crying_active=(enough(cry_keys) and max(left,right)<=.2 and c['browInnerUp']>=.6
+                       and min(c['mouthFrownLeft'],c['mouthFrownRight'])>=.45
+                       and min(c['eyeSquintLeft'],c['eyeSquintRight'])>=.3)
+        playful_active=(enough(play_keys) and max(left,right)<.55 and c['mouthPucker']>=.6
+                        and min(c['browOuterUpLeft'],c['browOuterUpRight'])>=.35 and not crying_active)
+        rules=(
+            ('laugh_like',laugh_active,1.2,12,dict(mouthSmileLeft=.65,mouthSmileRight=.65,jawOpen=.35,
+                                                cheekSquintLeft=.2,cheekSquintRight=.2),laugh_keys),
+            ('possible_crying',crying_active,2.5,30,dict(browInnerUp=.6,mouthFrownLeft=.45,mouthFrownRight=.45,
+                                                       eyeSquintLeft=.3,eyeSquintRight=.3,max_smile=.2),cry_keys),
+            ('playful_activity',playful_active,1.2,15,dict(mouthPucker=.6,browOuterUpLeft=.35,
+                                                       browOuterUpRight=.35,max_smile=.55),play_keys))
+        extra=[]
+        for name,active,duration,cooldown,thresholds,keys in rules:
+            emitted=self._rule(name,face,t,active=active,released=not active,duration=duration,
+                               thresholds=thresholds,keys=keys,cooldown=cooldown,provisional=True)
+            for event in emitted:
+                event['payload']['interpretation']='candidate_facial_pattern'
+                event['payload']['requires_context']=True
+                event['payload']['audible_evidence']=False
+                event['payload']['tear_evidence']=False
+            extra.extend(emitted)
+        # Smiling and open-mouth smiling may both be observed; the backend must
+        # not turn these into two responses. Default deployment remains smile-only.
+        return smile+extra

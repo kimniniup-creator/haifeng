@@ -19,6 +19,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--demo", action="store_true")
     parser.add_argument('--mode',choices=('hands','face'),default='hands',help='one detector on the existing unique camera provider')
+    parser.add_argument('--extended-face-cues',action='store_true',help='offline/observation-only provisional face patterns; no --send')
     parser.add_argument("--provider", help="module:function yielding timestamped frames")
     parser.add_argument("--seconds", type=float, help="bounded camera window, 0<seconds<=60; built-in IPC providers only")
     parser.add_argument('--continuous',action='store_true',help='persistent leased DirectShow provider only; exits on delivery/camera errors')
@@ -30,6 +31,8 @@ def main():
         parser.error("choose exactly one of --demo or --provider")
     if args.demo and args.mode!='hands':
         parser.error('Face mode uses real/injected frames; offline face fixtures are in tests/test_pet_vision_face.py')
+    if args.extended_face_cues and (args.mode!='face' or args.send):
+        parser.error('Extended face cues require face mode and observation-only output without --send')
     if args.seconds is not None and (not 0 < args.seconds <= 60 or not args.provider or
                                     args.provider not in ('pet_vision.ipc:frames','pet_vision.ipc:leased_video_frames','pet_vision.ipc:leased_opencv_frames')):
         parser.error('--seconds requires a built-in camera provider and 0<seconds<=60')
@@ -58,7 +61,7 @@ def main():
         sink = emit
     if args.mode=='face':
         from pet_vision.face_cues import FaceCueEngine
-        engine=FaceCueEngine()
+        engine=FaceCueEngine(extended=args.extended_face_cues)
     else:
         engine = GestureEngine()
     if args.demo:

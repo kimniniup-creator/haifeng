@@ -89,3 +89,56 @@ def test_real_face_model_blank_frame_if_installed():
         assert not result.faces and result.frame_quality['usable'] is False
     finally:
         detector.close()
+
+
+def test_laugh_like_needs_open_mouth_and_cheek_cues_not_audio():
+    sample=face(.8,jawOpen=.5,cheekSquintLeft=.4,cheekSquintRight=.4)
+    result=cues(feed(FaceCueEngine(extended=True),sample,count=30))
+    laugh=[e for e in result if e['payload']['cue_name']=='laugh_like']
+    assert len(laugh)==1 and laugh[0]['payload']['stable_ms']>=1200
+    assert laugh[0]['payload']['audible_evidence'] is False
+    assert laugh[0]['payload']['provisional'] is True
+    assert not any(e['payload']['cue_name']=='laugh_like' for e in cues(feed(FaceCueEngine(extended=True),face(.8,jawOpen=.8),count=20)))
+
+
+def crying_pattern(**extra):
+    return face(.1,browInnerUp=.8,mouthFrownLeft=.7,mouthFrownRight=.7,eyeSquintLeft=.5,eyeSquintRight=.5,**extra)
+
+
+def test_possible_crying_is_sustained_provisional_pattern_not_tears():
+    engine=FaceCueEngine(extended=True)
+    assert not cues(feed(engine,crying_pattern(),count=12))
+    result=cues(feed(engine,crying_pattern(),start=102.4,count=8))
+    assert len(result)==1 and result[0]['payload']['cue_name']=='possible_crying'
+    assert result[0]['payload']['stable_ms']>=2500
+    assert result[0]['payload']['requires_context'] and not result[0]['payload']['tear_evidence']
+    assert not cues(feed(FaceCueEngine(extended=True),face(.1,mouthFrownLeft=.8,mouthFrownRight=.8),count=30))
+
+
+def test_playful_pattern_does_not_classify_ordinary_motion():
+    engine=FaceCueEngine(extended=True)
+    events=[]
+    for i in range(30):
+        x=.005*(i%5)
+        neutral=FaceSample((.3+x,.2,.7+x,.8),face(.1).coefficients,dict(QUALITY))
+        events+=feed(engine,neutral,start=100+i*.2,count=1)
+    assert not cues(events)
+    result=cues(feed(FaceCueEngine(extended=True),face(.1,mouthPucker=.8,browOuterUpLeft=.6,browOuterUpRight=.6),count=20))
+    assert len(result)==1 and result[0]['payload']['cue_name']=='playful_activity'
+    assert result[0]['payload']['provisional'] is True
+
+
+def test_extended_patterns_disabled_by_default_and_multiface_blocked():
+    assert not cues(feed(FaceCueEngine(),crying_pattern(),count=30))
+    engine=FaceCueEngine(extended=True)
+    for i in range(30):
+        result=engine.update(FaceObservation(100+i*.2,(crying_pattern(),crying_pattern()),QUALITY),now=100+i*.2)
+        assert not cues(result)
+
+
+def test_extended_mode_cannot_send_to_production_cli():
+    import subprocess,sys
+    result=subprocess.run([sys.executable,'tools/run_pet_vision.py','--mode','face','--provider',
+                           'pet_vision.ipc:leased_opencv_frames','--extended-face-cues','--send'],
+                          capture_output=True,text=True,timeout=10)
+    assert result.returncode==2 and 'observation-only' in result.stderr
