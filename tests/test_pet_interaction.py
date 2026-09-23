@@ -308,7 +308,7 @@ def test_return_requires_verified_baseline_and_keeps_it_across_voice_epochs():
             if semantic == "return_to_start":
                 assert baseline_id == "verified-baseline"
                 return {"status": "completed"}
-            return {"status": "completed", "baseline_id": "verified-baseline"}
+            return {"status": "completed", "reason": "holding_verified", "baseline_id": "verified-baseline"}
     async def scenario():
         clock = Clock(); pet = PetController(motion=VerifiedMotion(), clock=clock)
         async def command(text, epoch):
@@ -362,6 +362,24 @@ def test_dry_run_look_up_never_creates_return_baseline():
         packet = speech(clock); packet["payload"] = {"text": "抬头"}
         await pet.handle(packet); await pet.drain()
         assert pet.motion_baseline is None
+        await pet.close()
+    run(scenario())
+
+
+def test_new_session_cannot_rebind_old_baseline_from_repeated_look_up():
+    class HeldMotion(FakeMotion):
+        async def submit(self, *args, **kwargs):
+            await super().submit(*args, **kwargs)
+            return {"status": "completed", "reason": "already_looking_up", "baseline_id": "old-baseline"}
+    async def scenario():
+        clock = Clock(); pet = PetController(motion=HeldMotion(), clock=clock)
+        await pet.voice_turn("old-session", 1, 1)
+        pet.motion_baseline = {"baseline_id": "old-baseline", "session_id": "old-session", "expires_at": clock()+120}
+        await pet.voice_turn("new-session", 1, 1)
+        packet = speech(clock); packet.update(session_id="new-session", payload={"text": "抬头"})
+        receipt = await pet.handle(packet); await pet.drain()
+        assert pet.motion_baseline is None
+        assert pet.decisions[receipt["decision_id"]]["motion"]["reason"] == "baseline_session_mismatch"
         await pet.close()
     run(scenario())
 

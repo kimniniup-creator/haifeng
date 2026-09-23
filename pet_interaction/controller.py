@@ -302,7 +302,10 @@ class PetController:
                 if decision["semantic_id"] == "look_up" and result.get("status") == "completed" and result.get("baseline_id"):
                     baseline_id = identifier(result["baseline_id"], "baseline_id")
                     # Original source time is conservative; repeats never extend the lease.
-                    if not self.motion_baseline or self.motion_baseline["baseline_id"] != baseline_id:
+                    if result.get("reason") == "already_looking_up":
+                        if not self.motion_baseline or self.motion_baseline["baseline_id"] != baseline_id or self.motion_baseline["session_id"] != event.session_id:
+                            decision["motion"] = {"status": "rejected", "reason": "baseline_session_mismatch"}
+                    elif result.get("reason") == "holding_verified":
                         self.motion_baseline = {"baseline_id": baseline_id, "session_id": event.session_id,
                                                 "expires_at": event.observed_at + 120}
                 elif decision["semantic_id"] == "return_to_start":
