@@ -79,3 +79,8 @@ separately. Only reviewed, measured results may unlock mappings.
 | 左右看 | not assigned | candidate, not open |
 | 点头 / 摇头 | existing attention candidate is not acceptance | not open |
 | 情绪表情 | named recorded candidates | listed assets only, not open |
+
+### Session retirement and owner review
+`await executor.invalidate_baseline()` is required on actual voice session change or disconnect, including before the first action receipt arrives. Utterance epoch changes still use `set_turn`. Invalidation cancels pending/active work, retires any existing or pending posture origin, clears its public ID, and retains the private seed. Subsequent postures reject with `posture_session_invalidated_requires_review`; a new session cannot accumulate pitch or obtain another ID for the old origin.
+
+Only the motion owner may call `await executor.review_reset_posture_baseline()`. Do not expose it through ordinary voice or public event routes. It returns true only with no active/queued work or latched fault, trusted diagnostics, zero offsets, joint tracking, and a full stable window at the original measured seed pose. It sends no commands. Expired seeds still require that original pose. Failure/cancellation retains retirement; faults require separate investigation. Recreating the executor loses the seed and is not evidence of physical review: the owner must physically re-establish and verify a baseline before live use after restart.
