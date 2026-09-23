@@ -119,8 +119,8 @@ def test_voice_authority_final_once_and_mechanical_only():
 class BlockingMotion(FakeMotion):
     def __init__(self):
         super().__init__(); self.started = asyncio.Event(); self.release = asyncio.Event()
-    async def submit(self, semantic, turn_id, ttl_seconds, request_id=None):
-        await super().submit(semantic, turn_id, ttl_seconds, request_id)
+    async def submit(self, semantic, turn_id, ttl_seconds, request_id=None, **kwargs):
+        await super().submit(semantic, turn_id, ttl_seconds, request_id, **kwargs)
         self.started.set()
         return {"status": "queued", "request_id": request_id}
     async def wait(self, request_id):
@@ -336,5 +336,25 @@ def test_rest_survives_duplicate_speech_start_until_explicit_wake():
         assert (await pet.handle(packet))["status"] == "accepted"
         await pet.drain()
         assert not pet.rest_requested
+        await pet.close()
+    run(scenario())
+
+
+def test_started_motion_uses_budget_without_refreshing_source_time():
+    async def scenario():
+        clock=Clock(); motion=BlockingMotion(); pet=PetController(clock=clock,motion=motion)
+        packet=event(clock,"presence",ttl_seconds=1.5,payload={"present":True})
+        result=await pet.handle(packet)
+        await motion.started.wait()
+        assert motion.calls[0]["start_deadline"] == 1001.5
+        assert motion.calls[0]["execution_budget_seconds"] == 10
+        clock.now+=2
+        await pet.tick()
+        assert pet.present is None and pet.active_id == result["decision_id"]
+        assert motion.cancel_count == 0
+        motion.release.set(); await pet.drain()
+        decision=pet.decisions[result["decision_id"]]
+        assert decision["motion"]["status"] == "completed"
+        assert decision["source_observed_at"] == 1000 and decision["start_deadline"] == 1001.5
         await pet.close()
     run(scenario())

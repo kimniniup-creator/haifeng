@@ -1,6 +1,4 @@
 """Owner adapters only; no daemon, microphone, camera or SDK ownership here."""
-import asyncio
-import time
 
 
 class FakeMotion:
@@ -12,10 +10,11 @@ class FakeMotion:
     async def set_turn(self, turn_id):
         self.turn = turn_id
 
-    async def submit(self, semantic, turn_id, ttl_seconds, request_id=None):
+    async def submit(self, semantic, turn_id, ttl_seconds, request_id=None, *, start_deadline=None, execution_budget_seconds=None):
         if ttl_seconds <= 0 or turn_id != self.turn:
             return {"status": "rejected", "reason": "expired_or_stale"}
-        self.calls.append({"semantic": semantic, "turn_id": turn_id, "request_id": request_id})
+        self.calls.append({"semantic": semantic, "turn_id": turn_id, "request_id": request_id,
+                           "start_deadline": start_deadline, "execution_budget_seconds": execution_budget_seconds})
         return {"status": "dry_run", "reason": "devices_disabled", "request_id": request_id}
 
     async def cancel(self):
@@ -79,12 +78,3 @@ def as_result(result):
     return {"status": "failed", "reason": "invalid_adapter_result"}
 
 
-async def motion_result(motion, semantic, token, deadline, request_id, clock=time.time):
-    await motion.set_turn(token)
-    remaining = deadline - clock()
-    if remaining <= 0:
-        return {"status": "dropped", "reason": "expired"}
-    result = as_result(await motion.submit(semantic, token, remaining, request_id=request_id))
-    if result.get("status") == "queued":
-        result = as_result(await motion.wait(request_id))
-    return result

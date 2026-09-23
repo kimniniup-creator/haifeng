@@ -2,6 +2,8 @@
 
 独立 `pet_interaction` 包，保留原 `bridge`。默认 fake 输出，无麦克风、摄像头、模型、daemon 启动或设备连接；导入不加载硬件库。当前是有界规则行为闭环，不是通用语言模型聊天或照片理解已交付。旧眼镜按键照片、M5 短回应与共享记忆目标继续保留，未恢复 M5 心情/疲惫机制。
 
+当前交付边界：中文语音与机械声音服务已由语音owner运行；交互后端已通过HTTP/WS连接该服务。视觉模块可以在唯一视频窗口按命令启动，默认不开摄像头，真人手势识别仍待现场验收。实体动作到位测试未通过，自动动作保持关闭，所有映射批准保持false。这四项不能合称整机验收完成。
+
 ## 启动与停止
 
 CPython 3.12，安装 `requirements-pet.txt`；测试另需 `pytest==9.1.1`。已有项目环境可运行：
@@ -45,6 +47,8 @@ operator kind 为 stop/rest/wake；`POST /v1/stop` 是 operator 紧急停止入�
 
 `GET /health` 为进程健康；带任一角色令牌读取 `/v1/state`、`/v1/decisions/{decision_id}`。accepted/scheduled/dispatched 不是设备完成；motion/voice 子回执及 `voice_receipt` 分别记录。当前决策缓存有界、不含原转写、原图或长期记忆，旧decision淘汰后返回404。
 
+停止回执分别报告motion/voice；stop_unconfirmed和motion_fault可见，不以accepted声称实体已停。`POST /v1/shutdown`仅operator可调用，只关闭这个后端实例；不关闭daemon或语音进程。声音queued期间状态为responding，只有匹配轮次的播放回执或超时才结束，旧轮回执不修改新轮状态。软件completed不是物理听见证明。
+
 ## 语音与动作装配
 
 语音owner保持唯一session/epoch。连接 `/events`，先接收state快照，发送 `{"type":"subscribe","consumer":"pet-agent"}`；消费turn_changed、speech_started、turn_input final和output_status。支持当前 `turn_id` 整数并原样回传，初始空input_id不会被当成有效final。partial不触发输出；一个final只决策一次，无法绑定当前会话的迟到final拒绝。断连清动作且不自动重连，旧会话不重新激活。
@@ -52,6 +56,8 @@ operator kind 为 stop/rest/wake；`POST /v1/stop` 是 operator 紧急停止入�
 语音回应走 `POST /api/agent-result`，原身份+response_id+semantic_id+`audio_mode=mechanical_only`+Unix expires_at。目前最多final之后2.5秒；HTTP200且accepted=false也记为拒绝。语义音色白名单由语音owner维护（ack/curious/happy/thinking/uncertain/sleepy）。`pet_interaction/rules.json` 明示唤名别称和命令：你好→happy、看这里→curious、停下/安静→取消动作声音、休息→静默等待唤醒、醒醒/唤名→关注、未知语句→uncertain且不动作，不声称理解复杂语义。称呼和标点仅在匹配副本规范化，stop/rest优先于wake；原转写不改写。
 
 动作直接使用动作owner的 `pet_motion.MotionExecutor`：set_turn(opaque token)、submit(semantic,token,剩余TTL,request_id)、wait(request_id)、cancel/close。语音token取真实session/epoch；视觉token在独立命名空间，是动作取消上下文而非语音epoch。新语音和停止抢占视觉；不会绕过该执行器直接调用SDK。
+
+动作请求同时传原事件`start_deadline`（Unix秒）和`execution_budget_seconds=10`：队列出队/首次POST前必须仍新鲜；已经准入的动作允许在独立预算内执行与回位，stop/换轮仍可随时取消。源observed_at不改，排队过期不能补发。Controller等待上限包含剩余开始窗口及执行预算，不再用事件1.5/2.5秒截断已开始动作。手部状态租约过期变unknown，不因此冒充取消一条正在其合法预算内执行的动作；明确未见手事件仍按当前交互优先级裁决。
 
 ## 验证与边界
 

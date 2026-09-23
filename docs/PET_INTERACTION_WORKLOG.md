@@ -15,3 +15,10 @@
 - 实际7860一次WS订阅预检：snapshot accepted、mechanical_only、整数turn_id、semantic_agent_connected=true，退出后已释放；动作调用0、声音调用0。未新开音频进程或注入声音。该证据只说明软件订阅联通。
 - 最小规则覆盖唤名/你好/看这里/停止/安静/休息/醒醒，未知语句机械疑惑且不动作。ASR同音别称配置可审阅，原转写不改。
 - 后续接口：总控确认事件开始期限与执行budget分离；动作owner在独立提交增加start_deadline/execution_budget_seconds，收到固定SHA后接入，不通过刷新event时间绕过过期。视觉owner正在修角色token、同步consumer例子与presence续租；后端已准备续租无重复动作、断流unknown。
+
+## 最终组合候选
+
+- 视觉71e4706三项接线修复已纳入；语音bc7effd失效订阅恢复已纳入且owner报告live更新。一次真实WS预检后，已启动唯一8091消费者连接既有7860，motion dryrun，不启相机。
+- 独立QA已复验12150fc的42项后端/进程/组合测试，包含false租约、两侧停止回执、称呼stop与播放回执身份；动作实体到位测试失败，保持设备动作关闭。
+- 动作0b999ac连同前置FK有界归一修正已纳入，pet_motion与owner该SHA逐文件diff一致。Controller传原始start_deadline+10s budget，等待不再按event TTL截断；新增已开始跨事件期限、租约unknown不误取消测试。
+- PR #4集中评审；原分支commit与远端一致，阶段文件均在本后台工作树，未抢写共享checkout。等待最终增量QA和总控裁决合main；真人连续语音/手势与动作到位仍独立验收。

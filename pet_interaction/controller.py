@@ -18,10 +18,13 @@ THRESHOLD = {"presence": 0.7, "wave": 0.7, "palm_stop": 0.7}
 
 
 class PetController:
-    def __init__(self, motion=None, voice=None, clock=time.time, capacity=2048):
+    def __init__(self, motion=None, voice=None, clock=time.time, capacity=2048, execution_budget_seconds=10):
         self.motion = motion or FakeMotion()
         self.voice = voice or FakeVoice()
         self.clock, self.capacity = clock, capacity
+        if type(execution_budget_seconds) not in {int, float} or not 0 < execution_budget_seconds <= 30:
+            raise ValueError("invalid_execution_budget")
+        self.execution_budget_seconds = execution_budget_seconds
         self.policy = RulePolicy()
         self.started_at = clock()
         self.state, self.present = "quiet", None
@@ -224,6 +227,8 @@ class PetController:
         decision = {"decision_id": decision_id, "event_id": event.event_id, "source": event.source,
                     "session_id": event.session_id, "semantic_id": semantic, "sound_semantic": sound,
                     "turn_id": event.turn_id, "epoch": event.epoch, "input_id": event.input_id,
+                    "source_observed_at": event.observed_at, "start_deadline": event.expires_at,
+                    "execution_budget_seconds": self.execution_budget_seconds,
                     "status": "scheduled", "expires_at": event.expires_at,
                     "understanding": "unrecognized" if intent == "unknown" else "local_rule", "intent": intent}
         self.decisions[decision_id] = decision
@@ -250,7 +255,8 @@ class PetController:
                 if not self._live(event, decision):
                     decision.update(status="dropped", reason="stale_or_expired")
                     return
-                motion = as_result(await self.motion.submit(decision["semantic_id"], token, event.expires_at - self.clock(), request_id=decision["decision_id"]))
+                motion = as_result(await self.motion.submit(decision["semantic_id"], token, event.expires_at - self.clock(), request_id=decision["decision_id"],
+                    start_deadline=event.expires_at, execution_budget_seconds=self.execution_budget_seconds))
                 decision["motion"] = motion
                 self.state = "responding"
             # Voice service performs its own final identity/expiry checks, including during playback.
@@ -262,7 +268,9 @@ class PetController:
                     "semantic_id": decision["sound_semantic"], "audio_mode": "mechanical_only", "expires_at": event.expires_at})
             if motion.get("status") == "queued":
                 try:
-                    decision["motion"] = as_result(await asyncio.wait_for(self.motion.wait(decision["decision_id"]), max(0.001, event.expires_at - self.clock())))
+                    # Owner independently checks the original start deadline before its first POST.
+                    # Once started, return/hold uses its bounded execution budget, not event freshness.
+                    decision["motion"] = as_result(await asyncio.wait_for(self.motion.wait(decision["decision_id"]), max(0, event.expires_at - self.clock()) + self.execution_budget_seconds + 1))
                 except asyncio.TimeoutError:
                     await self.motion.cancel()
                     decision["motion"] = {"status": "expired"}
@@ -308,9 +316,7 @@ class PetController:
                     self.state = "resting" if self.rest_requested else ("attention" if self.present else "quiet")
             if self.present is not None and self.clock() >= self.presence_until:
                 self.present = None
-                if self.active_priority <= PRIORITY["wave"] and not self.output_id and self.clock() >= self.voice_busy_until:
-                    self._invalidate()
-                    await self.motion.cancel()
+                if self.active_id is None and not self.output_id and self.clock() >= self.voice_busy_until:
                     if self.state != "resting":
                         self.state = "quiet"
 
