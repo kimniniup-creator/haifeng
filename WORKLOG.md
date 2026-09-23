@@ -150,3 +150,14 @@ Independent QA found that a failed WebSocket send removed only the event client,
   tests/report imported without unrelated QA branch history. This supersedes the
   pending independent review line above. Supervised live acceptance remains pending;
   no deployment or hardware access was performed during the implementation turn.
+
+## Authorized runtime maintenance — 2026-09-24 03:08
+
+After explicit coordinator authorization, replaced old backend via its operator
+shutdown, handed the sole voice owner its maintenance window, then launched main
+f08f11e backend with EnableVisualSounds and without EnableMotion. The voice owner
+preserved original mute before startup. Verified unique38800/7860 and45516/8091,
+voice+proactive subscriptions true, errors null, heartbeat alive beyond2s, capture
+fresh/dropped0. No test playback or visual event. Camera remains stopped; denied
+producer startup was not retried. Source/runtime/one manual-entry evidence recorded
+in SMILE_MAINTENANCE_PLAN; physical perception/audio acceptance still outstanding.

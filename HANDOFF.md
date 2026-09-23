@@ -140,3 +140,14 @@ pass; no physical playback or face accuracy claim. Independent final combination
 QA passed51+8; evidence source162c9c3 is imported in docs/VISUAL_SOUND_QA_RESULTS.md
 and qa/visual_sound. Use docs/SMILE_MAINTENANCE_PLAN.md as the single deployment plan.
 Production remains unchanged; previous vision restore was rejected before launch.
+
+## Runtime superseding checkpoint — 2026-09-24 03:08
+
+Main f08f11e voice/backend now deployed through their normal owner workflows:
+7860 unique38800/launcher46204, 8091 unique45516. Both ordinary voice and authenticated
+proactive WS connected with null errors beyond the lease interval. Voice remains
+muted=true as before maintenance; capture fresh and dropped0. No visual/audition
+event was sent. Vision producer remains absent and its previously denied creation
+was not retried. No camera/daemon/torque action. Full evidence and the one later
+normal user entry are in docs/SMILE_MAINTENANCE_PLAN.md. This supersedes the prior
+"production unchanged" statement only for voice/backend, not vision or motion.
