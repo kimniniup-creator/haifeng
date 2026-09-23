@@ -29,7 +29,7 @@
 
 Main code 50762eb includes PR4, PR5 and PR6. The shared checkout was updated by clean fast-forward only. Interaction API listens on 127.0.0.1:8091, actual server PID 46292, launched from the main workspace with the isolated integration interpreter and `--enable-devices --voice-url http://127.0.0.1:7860`. No `--enable-motion` flag was supplied; mapping approvals remain false. Backend source has not changed since its verified restart.
 
-Independent read-only checks during continuous vision operation observed `voice_connected=true`, `voice_link_error=null`, `hand_visibility=not_visible`; voice port 7860 (actual listener PID 41268) reported `semantic_agent_connected=true`, `mode=mechanical_only`, `error=null` and ongoing listening/hearing. No daemon or voice process was restarted for this deployment. Vision process and stop details are maintained in `docs/pet_vision/HANDOFF.md`.
+Independent read-only checks during continuous vision operation observed `voice_connected=true`, `voice_link_error=null`, `hand_visibility=not_visible`; voice port 7860 (actual listener PID 41268) reported `semantic_agent_connected=true`, `mode=mechanical_only`, `error=null` and ongoing listening/hearing. No daemon or voice process was restarted for this deployment. Vision process and stop details are maintained in `docs/pet_vision/DEPLOYMENT_2026-09-24.md`.
 
 To stop only the interaction service, send authenticated operator `POST http://127.0.0.1:8091/v1/shutdown`. Read the operator credential locally from ignored `.runtime/pet-local-tokens.json`; never copy it into documentation or command-line arguments. This endpoint does not stop the independent voice or vision owners. Process IDs describe this checkpoint and must be verified before any later stop operation.
 
