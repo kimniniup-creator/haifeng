@@ -123,3 +123,30 @@
 
 ### Voice transport recovery follow-up — 2026-09-24
 Independent QA found that a failed WebSocket send removed only the event client, leaving its Agent subscription active and disabling the local acknowledgment indefinitely. Unified cleanup now removes both identities, updates connected state and closes the failed socket with a bounded timeout. Added send-failure, send-timeout and remaining-subscriber regressions: all 29 focused tests pass without opening hardware. Runtime restart is coordinated with the owner because audio testing window has already been returned.
+
+## Proactive visual audio — 2026-09-24
+- Independent worktree codex/proactive-pet-audio based on origin/main 6ecdcfc; existing production voice untouched.
+- Authenticated lease-bound visual short sound transport; no fake ASR final, no new player or sounds. Existing gate reused with non-consuming proactive responses.
+- New observations only, 2s event TTL, 1.5s heartbeat expiry, 8s cooldown, voice/quiet/capture priority; callback rechecks lease and activity. Physical AEC and natural onset guarantees are explicitly not claimed.
+- Contract in patches/reachy_companion/PROACTIVE_AUDIO.md. Offline no-device tests cover stale, expiry, mute, disconnect, cooldown, pre-VAD activity, response receipts and original behavior. Pending independent QA/integration; no live restart or playback authorized in this implementation phase.
+- Independent QA found exact-deadline playback still allowed one block with strict greater-than comparison. Enqueue, callback expiry and reason selection now use >=. Two exact-deadline regressions added; all 49 no-device voice tests pass. No deployment.
+
+## Stable smile integration candidate — 2026-09-24
+
+- PR11 combines face source fa36bab, proactive audio source 0bd88b6 + dbd8bd5,
+  and Agent visual policy/real HTTP-WS adapter. Fixed smile code 7db4d40; later
+  candidate 624ec3b adds previously accepted maintenance diagnostics and records.
+- Three real-protocol combination tests: stable FaceCueEngine cue reaches nonzero
+  PCM and completed receipt; speech/lease disconnect stop subsequent buffers.
+  Related fixed suite 51 passed; existing interaction integration 11 passed.
+- Legacy gate independent24+3, cached gate independent17 accepted; local cached
+  helper/installer integration13 passed. Desktop source gate accepted21+3 only;
+  full build/visual/Tauri remain pending. No production services were changed.
+- Main current outcome still awaits independent combination QA and supervised
+  live camera/audibility. Vision startup's previous automatic policy rejection
+  remains recorded; no retry through another tool. Use SMILE_MAINTENANCE_PLAN.md.
+
+- Final offline combination QA closed at source162c9c3: independent51+8 pass,
+  tests/report imported without unrelated QA branch history. This supersedes the
+  pending independent review line above. Supervised live acceptance remains pending;
+  no deployment or hardware access was performed during the implementation turn.

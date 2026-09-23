@@ -135,7 +135,7 @@ class RequestWorker:
             self._ensure_live(request_id)
             motion = (robot_result or {}).get("motion_status")
             audio = (robot_result or {}).get("audio_status")
-            motion_ok = motion in {"completed", "succeeded", "success"}
+            motion_ok = motion in {"completed", "succeeded", "success", "disabled"}
             audio_ok = audio in {None, "completed", "succeeded", "success", "disabled", "not_requested"}
             final_status = "completed" if motion_ok and audio_ok else "completed_with_errors"
             self.store.update_request(request_id, status=final_status, robot_json=json.dumps(robot_result or {}))

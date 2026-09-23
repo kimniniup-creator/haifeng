@@ -1,5 +1,14 @@
 # Continuous vision deployment evidence
 
+**Superseded operational state, 2026-09-24 maintenance:** the producer tree below
+was stopped for native maintenance. Its attempted restore was rejected by automatic
+approval before process creation (`CreateProcess Rejected: blocked by policy`, no
+further reason supplied). No replacement reader started. Do not reuse the historic
+PID as a current stop target. Current face/smile code is offline only; see
+`../VISUAL_SMILE_RESPONSE.md` and `../SMILE_MAINTENANCE_PLAN.md` for the coordinated
+candidate and remaining live verification. No shell/tool/owner retry may bypass
+that rejected startup action.
+
 Checked at 2026-09-24 00:35:12 +08:00. This is a point-in-time operational record, not a guarantee of future process state.
 
 ## Deployed source and validation

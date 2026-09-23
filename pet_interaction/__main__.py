@@ -10,6 +10,7 @@ def main():
     parser.add_argument("--enable-devices", action="store_true")
     parser.add_argument("--enable-motion", action="store_true", help="also enable owner-approved physical motion")
     parser.add_argument("--voice-url", help="explicit loopback voice-owner endpoint; subscribes as pet-agent")
+    parser.add_argument("--enable-visual-sounds", action="store_true", help="explicit authenticated proactive audio lease; no motors")
     args = parser.parse_args()
     if args.enable_motion and not args.enable_devices:
         parser.error("--enable-motion also requires --enable-devices")
@@ -24,6 +25,12 @@ def serve(args, parser):
     from .service import create_app
     if args.voice_url and not args.enable_devices:
         parser.error("--voice-url requires --enable-devices (subscription changes acknowledgement ownership)")
+    proactive = None
+    if args.enable_visual_sounds:
+        if not args.enable_devices or not args.voice_url:
+            parser.error("--enable-visual-sounds requires --enable-devices and --voice-url")
+        from .proactive_link import HttpProactiveVoice
+        proactive = HttpProactiveVoice(args.voice_url, os.environ.get('HAIFENG_PROACTIVE_TOKEN'))
     motion, voice = FakeMotion(), FakeVoice()
     if args.enable_devices:
         from pet_motion import MotionExecutor
@@ -31,7 +38,7 @@ def serve(args, parser):
         if args.voice_url:
             voice = HttpVoice(args.voice_url)
     tokens = {role: os.environ[name] for role, name in (("operator", "PET_API_TOKEN"), ("vision", "PET_VISION_TOKEN")) if os.environ.get(name)}
-    app = create_app(PetController(motion=motion, voice=voice), tokens, args.voice_url)
+    app = create_app(PetController(motion=motion, voice=voice, proactive=proactive), tokens, args.voice_url)
     # Bind before adapter startup/lifespan: a second launcher cannot touch devices.
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
