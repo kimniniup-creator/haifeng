@@ -159,3 +159,12 @@ python -m pytest tests/test_pet_interaction.py tests/test_pet_interaction_integr
 - 源码审查确认读取失败立即退出、finally释放采集句柄与lease；原生卡死使用自身进程退出兜底。软件检查不等于真实长期运行、真人手势识别或实体动作通过。
 
 **结论：该固定版本无已知软件合并/已授权唯一producer部署阻断。** 交集成负责人合并、视觉owner在协调窗口部署；QA不部署、不操作设备、不重跑107项。motion dry-run及映射/profile未批准边界保持。owner报告的60秒实采264不同帧、66 accepted及backend状态转换仅作转达证据，不计入QA亲测。
+
+## 显式抬头闭环初审（2026-09-24）
+
+固定 `833b903b4405f2a661521499f3250ea2c296cbde` 含只读diagnostics前置版本；独立运行motion、micro、posture、telemetry及两项QA复现：**59 passed，2 failed，45.90秒**，另有一项Starlette/AnyIO弃用警告。只使用假设备、测试API和内存，未访问SDK、实机或媒体。
+
+1. **P1：保持后停止的调用者取消会提前恢复准入。** 首次look_up成功后，idle baseline分支在pin_current_joints验证await期间被调用方取消；CancelledError未被except Exception处理，finally清除stopping。复现确认available=True、baseline仍在，但保持没有完成验证。要求有界独立hold任务受shield保护，调用者取消也须等到验证完成或故障锁定；未确认不得恢复准入。
+2. **P2：重复抬头绕过目标追踪误差检查。** 首次成功后仅将目标关节之一增加0.02 rad，实测pose不变；重复look_up返回completed/already_looking_up。previous分支在0.005 rad目标追踪门禁前直接成功。要求重复路径也验证目标误差和稳定保持，不能以单次姿态匹配宣告成功。
+
+两项已交唯一动作owner修复并回传固定SHA，**本版本暂不给实体探测软件放行**。显式baseline ID、120秒不刷新、故障清公开baseline等已有静态/单元覆盖，但跨认证session绑定由上层服务负责，本模块的opaque turn变化本身不会清baseline，仍需集成验收。默认所有mapping/profile未批准；离线通过也不等于方向、到位、保持、停止和回原点的真实闭环通过。
