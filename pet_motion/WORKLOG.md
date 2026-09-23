@@ -124,3 +124,7 @@ LOOK_UP.md is the cross-owner and second-host interface handoff.
 ## Cached branch diagnostics ready for maintenance review
 - Added four attribute-only fields with explicit cached/unknown semantics, preserving schema and existing fields. No hardware getters, controller access, added tick counters, installation or process changes.
 - Focused telemetry tests: 5 passed (one existing benign dependency warning), including a controller object that raises on every access and missing fields remaining null. Native running helper is unchanged.
+
+## Cached-field independent QA correction
+- Fixed four reproduced implicit-property calls with static lookup and strict scalar type acceptance; unknown/descriptor values return null. Added independent reproductions and hostile dynamic-getter/conversion tests.
+- Visual smile-to-sound flow takes priority independently of unverified motion. No new action mapping, camera/audio access, or native deployment.
