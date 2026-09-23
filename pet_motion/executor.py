@@ -94,7 +94,7 @@ class MotionExecutor:
 
     def _drain(self, reason):
         while self._queue:
-            result, _, _ = self._queue.popleft()
+            result, _, _, _ = self._queue.popleft()
             self._save(replace(result, status="cancelled", reason=reason))
 
     def _trip(self, reason):
@@ -109,7 +109,8 @@ class MotionExecutor:
                 self._turn = turn_id
                 await self._cancel("turn_changed")
 
-    async def submit(self, semantic, turn_id, ttl_seconds, request_id=None):
+    async def submit(self, semantic, turn_id, ttl_seconds, request_id=None, *,
+                     start_deadline=None, execution_budget_seconds=None):
         request_id = request_id or str(uuid4())
         if not isinstance(request_id, str):
             raise ValueError("request_id must be a string")
@@ -126,6 +127,16 @@ class MotionExecutor:
             return self._save(replace(result, reason="stale_turn"))
         if not isinstance(ttl_seconds, (int, float)) or not math.isfinite(ttl_seconds) or ttl_seconds <= 0:
             return self._save(replace(result, reason="expired"))
+        admission_deadline = time.monotonic() + ttl_seconds
+        if start_deadline is not None:
+            if not isinstance(start_deadline, (float, int)) or not math.isfinite(start_deadline):
+                return self._save(replace(result, reason="invalid_start_deadline"))
+            admission_deadline = min(admission_deadline, time.monotonic() + start_deadline - time.time())
+            if admission_deadline <= time.monotonic():
+                return self._save(replace(result, reason="expired"))
+        if execution_budget_seconds is not None:
+            if not isinstance(execution_budget_seconds, (float, int)) or not math.isfinite(execution_budget_seconds) or not 0 < execution_budget_seconds <= 30:
+                return self._save(replace(result, reason="invalid_execution_budget"))
         if not self.available:
             return self._save(replace(result, reason=self._fault or "stopping"))
         mapping = self.mappings.get(semantic)
@@ -144,7 +155,7 @@ class MotionExecutor:
         result = replace(result, status="queued")
         self._futures[request_id] = asyncio.get_running_loop().create_future()
         self._save(result, terminal=False)
-        self._queue.append((result, turn_id, time.monotonic() + ttl_seconds))
+        self._queue.append((result, turn_id, admission_deadline, execution_budget_seconds))
         self._wake.set()
         if self._worker is None:
             self._worker = asyncio.create_task(self._run())
@@ -187,11 +198,12 @@ class MotionExecutor:
             await self._wake.wait()
             self._wake.clear()
             while self._queue and not self._closed:
-                result, turn, deadline = self._queue.popleft()
-                if turn != self._turn or time.monotonic() >= deadline:
+                result, turn, admission_deadline, budget = self._queue.popleft()
+                if turn != self._turn or time.monotonic() >= admission_deadline:
                     self._save(replace(result, status="expired", reason="stale_or_expired"))
                     continue
-                self._active = asyncio.create_task(self._perform(result, deadline))
+                deadline = admission_deadline if budget is None else time.monotonic() + budget
+                self._active = asyncio.create_task(self._perform(result, deadline, admission_deadline=admission_deadline))
                 try:
                     final = await self._active
                 except asyncio.CancelledError:
@@ -220,15 +232,19 @@ class MotionExecutor:
             self._trip("stop_unconfirmed")
             return False
 
-    async def _perform(self, result, deadline, mapping=None):
+    async def _perform(self, result, deadline, mapping=None, admission_deadline=None):
         mapping = mapping if mapping is not None else self.mappings[result.semantic_id]
         if "micro_profile" in mapping:
             from .micro import run_micro
-            return await run_micro(self, result, deadline, self.micro_profiles[mapping["micro_profile"]])
+            async with asyncio.timeout_at(deadline):
+                outcome = await run_micro(self, result, deadline, self.micro_profiles[mapping["micro_profile"]], admission_deadline=admission_deadline)
+            if time.monotonic() >= deadline and outcome.status in {"completed", "cancelled"}:
+                outcome = replace(outcome, status="expired", reason="execution_budget_expired")
+            return outcome
         uuid = None
         try:
             async with self.transport.session() as session:
-                if time.monotonic() >= deadline:
+                if time.monotonic() >= min(deadline, admission_deadline if admission_deadline is not None else deadline):
                     return replace(result, status="expired")
                 start = asyncio.create_task(session.start(mapping))
                 try:

@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import math
+import time
 import unittest
 from contextlib import asynccontextmanager
 from uuid import uuid4
@@ -122,6 +123,43 @@ class MicroTests(unittest.IsolatedAsyncioTestCase):
         receipt = await self.motion.submit("attention", "probe", 2)
         self.assertEqual((await self.motion.wait(receipt.request_id)).reason, "micro_ttl_too_short")
         self.assertEqual(self.daemon.starts, [])
+
+    async def test_fresh_start_can_finish_return_after_event_expires(self):
+        self.daemon.auto_complete = False
+        receipt = await self.motion.submit("attention", "probe", .5,
+                                            start_deadline=time.time()+.5,
+                                            execution_budget_seconds=10)
+        await self.daemon.started.wait()
+        await asyncio.sleep(.6)
+        first_uuid, first = self.daemon.starts[0]
+        self.daemon.state.update(head_pose=first["head_pose"], antennas_position=first["antennas"], body_yaw=first["body_yaw"])
+        self.daemon.auto_complete = True
+        await self.daemon.events.put((first_uuid, "move_completed"))
+        self.assertEqual((await self.motion.wait(receipt.request_id)).status, "completed")
+        self.assertEqual(len(self.daemon.starts), 2)
+
+    async def test_preflight_crossing_original_deadline_never_starts(self):
+        original_snapshot = self.daemon.snapshot
+        async def slow_snapshot():
+            await asyncio.sleep(.05)
+            return await original_snapshot()
+        self.daemon.snapshot = slow_snapshot
+        receipt = await self.motion.submit("attention", "probe", .02,
+                                            start_deadline=time.time()+.02,
+                                            execution_budget_seconds=10)
+        self.assertEqual((await self.motion.wait(receipt.request_id)).status, "expired")
+        self.assertEqual(self.daemon.starts, [])
+
+    async def test_new_turn_cancels_independent_budget_in_flight(self):
+        self.daemon.auto_complete = False
+        receipt = await self.motion.submit("attention", "probe", 2.5,
+                                            start_deadline=time.time()+2.5,
+                                            execution_budget_seconds=10)
+        await self.daemon.started.wait()
+        await self.motion.set_turn("new_epoch")
+        self.assertEqual((await self.motion.wait(receipt.request_id)).status, "cancelled")
+        self.assertEqual(len(self.daemon.starts), 1)
+        self.assertEqual(self.daemon.stops, [self.daemon.starts[0][0]])
 
     async def test_cancel_between_legs_holds_without_return(self):
         verifying = asyncio.Event()

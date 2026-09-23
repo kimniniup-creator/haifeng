@@ -70,7 +70,7 @@ def goto_payload(target, profile):
             "duration": profile["leg_seconds"], "interpolation": "minjerk"}
 
 
-async def run_micro(executor, result, deadline, profile):
+async def run_micro(executor, result, deadline, profile, *, admission_deadline=None):
     """Two sequential UUID segments; no automatic return after cancellation/error."""
     moved = False
     last = result
@@ -96,7 +96,7 @@ async def run_micro(executor, result, deadline, profile):
             return replace(result, status="rejected", reason="micro_ttl_too_short")
         origin = await measure()
         target = target_pose(origin, profile)
-        for destination in (target, origin):
+        for leg_index, destination in enumerate((target, origin)):
             current = await measure()
             # Recompute return timing from measured error, not assumed arrival.
             angle = math.degrees(rotation_distance(current["head"], destination["head"]))
@@ -107,7 +107,8 @@ async def run_micro(executor, result, deadline, profile):
                 raise ValueError("unexpected non-head motion")
             moved = True
             leg_profile = {**profile, "leg_seconds": duration}
-            last = await executor._perform(result, deadline, mapping={"_goto": goto_payload(destination, leg_profile)})
+            last = await executor._perform(result, deadline, mapping={"_goto": goto_payload(destination, leg_profile)},
+                                           admission_deadline=admission_deadline if leg_index == 0 else None)
             if last.status != "completed":
                 if last.status == "failed" and last.uuid:
                     await hold()

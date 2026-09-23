@@ -29,3 +29,42 @@ seconds), execution_budget_seconds (10 for micro). Queue and first POST must
 still reject expired original events; never refresh their source timestamps.
 Epoch/stop continue to cancel in-flight execution. This is a separate code change
 after the numerical-pose fix, with independent regression coverage.
+
+## Second authorized probe: actual target not reached
+
+- Fixed reviewed code 03a24f9, QA 39 tests passed. Voice restart finished and its
+  owner explicitly released the window; integrated backend remained dry-run.
+- One goto only: UUID `5fd8a28e-0cea-4a30-bd94-dcd48b87938e`. Requested local-Y
+  1.5 degrees over 1.5 seconds. UUID receipt to move_completed: 1.500 seconds.
+  No return goto, no retry, no larger command, no motor enable or SDK changes.
+- Measured outbound rotation from origin settled around 1.033 degrees, but the
+  rotation error to the intended target was about 1.081 degrees (best sampled
+  1.08015), above 0.005 rad (~0.286 degrees). Translation changed about 0.490 mm;
+  measured antennas and body yaw were unchanged. Completion event was therefore
+  correctly insufficient: result failed/micro_verification_failed.
+- The failure path issued one measured-pose hold; set_target returned ok. Pose
+  subsequently changed further: sampled origin-relative peak 1.848 degrees,
+  delayed read 1.858 degrees. Thus physical hold stability is not accepted either.
+  This may involve FK/IK or control accuracy, but the cause is unproven; no claim
+  of damaged hardware. No threshold relaxation or automatic mapping approval.
+- Final and delayed reads: daemon running/enabled, daemon/backend error null,
+  control-loop nb_error=0, running=[]. Both owners received window-return messages.
+  Raw local-only evidence: main-project .runtime/pet-micro-probe-20260924-second.json.
+- Recheck conditions: independently review raw target vs measured matrices and
+  FK/IK consistency, hold behavior and pose drift; obtain a new explicit device
+  window before any further motion. Neither return nor interruption acceptance
+  has been demonstrated. Real motion remains blocked; software integration may
+  continue in dry-run.
+
+## TTL split implementation
+
+- Compatible optional submit keywords start_deadline (original Unix event expiry)
+  and execution_budget_seconds (<=30, intended micro budget 10). Retain remaining
+  event TTL and take the earlier admission deadline; never refresh source time.
+- Dequeue and first actual dispatch after preflight check admission. Budget starts
+  conservatively at dequeue, covering preflight, both legs and verification;
+  epoch/stop still preempts it. No keyword retains previous whole-action TTL.
+- New regression cases: expired queued request cannot start despite long budget;
+  fresh request can return after event expiry; new turn cancels active budget;
+  slow preflight crossing original deadline makes zero submissions; invalid
+  budget/expired absolute deadlines rejected.

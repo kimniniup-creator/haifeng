@@ -22,9 +22,19 @@ changing it cancels active work and discards pending work. The service can use
 for event authentication, durable deduplication, authoritative epochs, and
 preventing vision from interrupting active speech. Calculate remaining TTL from
 the incoming absolute expiry before submission. The adapter converts it to a
-monotonic deadline; the deadline applies to queued and running work.
+monotonic deadline. By default it applies to queued and running work. To separate
+freshness from motion budget, pass the original Unix event expiry as
+`start_deadline=event.expires_at` plus `execution_budget_seconds=10`. The earlier
+of that absolute deadline and remaining `ttl_seconds` gates dequeue **and the
+first POST after preflight**. Expired events never gain a fresh timestamp. The
+execution budget starts at dequeue (conservatively includes preflight), lasts at
+most 30 seconds, and permits an already-admitted return after event expiry.
+Cancellation/epoch changes still stop it immediately; bounded stop/hold cleanup
+can extend beyond the execution deadline. Without the new keyword, existing
+whole-action TTL behavior is unchanged.
 
-`submit(semantic, turn_id, ttl_seconds, request_id=None)` returns immediately for
+`submit(semantic, turn_id, ttl_seconds, request_id=None, *, start_deadline=None,
+execution_budget_seconds=None)` returns immediately for
 normal actions. `queued` means accepted into the bounded FIFO, never completed.
 `wait(request_id)` awaits the terminal result; `get_result(request_id)` gives the
 latest immutable `MotionResult`. Fields: `request_id`, `status`, `reason`, `uuid`,
