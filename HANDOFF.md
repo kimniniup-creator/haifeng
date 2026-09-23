@@ -126,3 +126,6 @@ pinned upstream trace are in `patches/reachy_desktop_no_autowake/README.md`.
 No running application was changed or restarted; no device action was sent.
 Focused callback tests pass, while full desktop build, visual QA and supervised
 physical deployment acceptance remain pending. Preserve the current live state.
+
+## Proactive visual sound handoff
+Voice-side optional /proactive-events and /api/proactive-sound implementation is isolated; production remains unchanged. Use PROACTIVE_AUDIO.md as exact contract. Agent owner 01a0ce0d-92ad-72c1-b7eb-3effbd8b01dc agreed Unix observation timestamps, unchanged epoch on acceptance, no retry playback, happy/ack/curious existing sounds. Secret provisioning and live maintenance require coordinated deployment, not an extra audio process. User speech/stop retains priority.

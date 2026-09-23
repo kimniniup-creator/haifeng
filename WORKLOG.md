@@ -123,3 +123,9 @@
 
 ### Voice transport recovery follow-up — 2026-09-24
 Independent QA found that a failed WebSocket send removed only the event client, leaving its Agent subscription active and disabling the local acknowledgment indefinitely. Unified cleanup now removes both identities, updates connected state and closes the failed socket with a bounded timeout. Added send-failure, send-timeout and remaining-subscriber regressions: all 29 focused tests pass without opening hardware. Runtime restart is coordinated with the owner because audio testing window has already been returned.
+
+## Proactive visual audio — 2026-09-24
+- Independent worktree codex/proactive-pet-audio based on origin/main 6ecdcfc; existing production voice untouched.
+- Authenticated lease-bound visual short sound transport; no fake ASR final, no new player or sounds. Existing gate reused with non-consuming proactive responses.
+- New observations only, 2s event TTL, 1.5s heartbeat expiry, 8s cooldown, voice/quiet/capture priority; callback rechecks lease and activity. Physical AEC and natural onset guarantees are explicitly not claimed.
+- Contract in patches/reachy_companion/PROACTIVE_AUDIO.md. Offline no-device tests cover stale, expiry, mute, disconnect, cooldown, pre-VAD activity, response receipts and original behavior. Pending independent QA/integration; no live restart or playback authorized in this implementation phase.
