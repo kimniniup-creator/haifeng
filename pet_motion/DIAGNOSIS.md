@@ -111,3 +111,10 @@ Local raw evidence (ignored, not uploaded):
 
 Software TTL integration is independently ready in commit 0b999ac and passed
 44 tests plus independent QA. Real automatic motion remains disabled.
+
+## 2026-09-24 post-restart read-only tracking evidence
+Maintenance owner handed over a read-only window for daemon 41652; Kim is away, so motion and torque changes remain prohibited. Five GET diagnostic samples spaced 0.5 seconds apart reported stable_read=true, enabled, error=null, active_move_depth=0 and all six speech offsets zero. Desired and effective Cartesian targets were the same, approximately identity; ik_required=true.
+
+Actual minus desired head/body joints were approximately [-0.527, 1.191, 2.500, -6.718, -0.225, -6.894, 10.058] degrees. Maximum joint error remained 10.058 degrees across samples. Measured Cartesian target error settled near 8.645 degrees and 8.518 mm. This fails the existing 0.005-radian joint tracking preflight without issuing any command. No threshold was changed.
+
+This establishes current target tracking mismatch; it does not establish motor torque, hardware failure, or the cause of the earlier 1.08-degree probe error. Zero offsets only describe these new samples. Raw evidence is intentionally ignored at `.runtime/posture-readonly-after-restart.json`. Next: maintenance/owner investigation with an observable device window; no automated repeat, enable/disable, SDK writes, or pose correction was performed.

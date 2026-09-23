@@ -112,3 +112,7 @@ LOOK_UP.md is the cross-owner and second-host interface handoff.
 - Integration QA demonstrated first-action interruption could leave a private origin that a later session reused to issue a new public baseline. Added explicit session invalidation separate from utterance cancellation, retaining seed but rejecting postures until owner review.
 - Added owner-only read-only review reset requiring stable original measured pose, zero offsets and joint tracking, with no motion/queue/fault. It cannot clear faults and is not exposed to voice. Expired origin is still checked, not discarded.
 - Added regressions for completed and first-receipt-inflight session retirement, no-posture session changes, repeated invalidation, expired-seed review, and cancellation/timeout fault retention. No live device operations.
+
+## 2026-09-24 read-only window after native restart
+- New diagnostics available; 5 GET-only samples show current max joint tracking error 10.058 degrees, pose error about 8.645 degrees/8.518 mm, despite reported enabled/error-null and zero speech offsets. Existing preflight rejects this state.
+- Sent evidence to maintenance owner and coordinator. Kim away: no motion, torque changes, SDK writes or automatic corrections. Physical cause remains unproven; DIAGNOSIS.md records scope and evidence.
