@@ -1,1 +1,20 @@
-.photo-actions > .visually-hidden { display: none !important; }
+.rail-actions { margin-top: auto; display: grid; }
+.settings-launch { margin-top: 0; }
+.danger-button { color: #8d4933; }
+.danger-fill { background: #8d4933; border-color: #8d4933; }
+.photo-actions.is-disabled { opacity: .45; pointer-events: none; }
+.privacy-note { margin: 0 0 9px; color: var(--muted); font-size: 12px; }
+@media (min-width: 1000px) {
+  .workspace { display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(320px, .82fr); column-gap: 38px; align-content: start; max-width: 1260px; }
+  .topline { grid-column: 1 / -1; }
+  .memory-canvas { padding-top: 28px; }
+  .photo-stage { min-height: 330px; }
+  .conversation { padding-top: 28px; }
+}
+@media (max-width: 760px) {
+  .rail-actions { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 12px; }
+  .settings-launch { position: static; }
+  .session-list { max-height: 72px; }
+  .photo-actions { grid-template-columns: minmax(0, 1fr) !important; }
+  .photo-actions > label, .photo-actions > button { min-width: 0; width: 100%; }
+}
