@@ -161,3 +161,23 @@ voice+proactive subscriptions true, errors null, heartbeat alive beyond2s, captu
 fresh/dropped0. No test playback or visual event. Camera remains stopped; denied
 producer startup was not retried. Source/runtime/one manual-entry evidence recorded
 in SMILE_MAINTENANCE_PLAN; physical perception/audio acceptance still outstanding.
+
+## Upstream photo Agent deployment — 2026-09-24
+
+Imported upstream b078189 local_agent and emotion contract into an isolated branch.
+Windows Python 3.12 environment installed with upstream tested constraints. Real E06
+capture and DeepSeek Flash photo analysis succeeded via explicitly configured JSON
+mode and thinking disabled. Added scene-response emotion evidence and deterministic
+head-gesture mapping, none/low-quality suppression, local Python BLE adapter and
+mobile layout fixes. 41 tests passed. Desktop/mobile screenshots inspected; no JS
+errors or horizontal overflow. Deployment details: local_agent/DEPLOYMENT.md.
+Physical execution remains blocked by native ready export plus ~10-degree joint
+tracking discrepancy; native runtime untouched and shared motion owner notified.
+
+Follow-up: Kim oriented E06 and authorized a new capture. Model saw a person holding
+a playing card; scene response curiosity. Removed blanket limited-quality suppression
+when evidence exists and no recapture is needed. Same-photo image job independently
+confirmed curiosity -> roll6deg -> neutral, with ROBOT_NOT_READY clearly displayed.
+55 regression tests plus one independent motor-gate test passed. Hardware motion
+remains disabled independently of future daemon readiness repair. Single PID45980
+listens on loopback8765; screenshot QA refreshed for the actual second scene.
