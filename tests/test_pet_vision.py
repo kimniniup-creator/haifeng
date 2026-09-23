@@ -176,3 +176,25 @@ def test_async_sink_is_rejected_instead_of_silently_lost():
     async def async_sink(event): pass
     with pytest.raises(TypeError,match='synchronous'):
         Pipeline(None,GestureEngine(),async_sink)
+
+
+@pytest.mark.parametrize('seconds', [0, -1, 61, float('nan'), float('inf')])
+def test_camera_window_rejects_invalid_duration_before_start(seconds, monkeypatch):
+    from pet_vision import ipc
+    def forbidden(*args, **kwargs):
+        pytest.fail('Invalid duration must not open a camera process')
+    monkeypatch.setattr(ipc.subprocess, 'Popen', forbidden)
+    with pytest.raises(ValueError, match='Camera window'):
+        list(ipc.frames(opencv=True, seconds=seconds))
+
+
+def test_camera_provider_forwards_bounded_window(monkeypatch):
+    from pet_vision import ipc
+    calls = []
+    def fake_frames(**kwargs):
+        calls.append(kwargs)
+        return iter(())
+    monkeypatch.setattr(ipc, 'frames', fake_frames)
+    list(ipc.leased_opencv_frames(seconds=60))
+    list(ipc.leased_video_frames())
+    assert calls == [{'opencv': True, 'seconds': 60}, {'direct': True, 'seconds': 15}]

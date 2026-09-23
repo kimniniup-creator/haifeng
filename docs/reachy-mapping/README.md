@@ -1,6 +1,6 @@
 # 另一台主机的动作与表情映射入口
 
-权威仓库：`https://github.com/kimniniup-creator/haifeng`（私有，另一台主机需有仓库访问权限）。拉取最新 main 后，本目录可离线用于设计映射，不需要连接机器人。
+权威仓库：`https://github.com/kimniniup-creator/haifeng`（公开，Kim 已确认此设置）。拉取最新 main 后，本目录可离线用于设计映射，不需要连接机器人。
 
 ## 文件
 

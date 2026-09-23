@@ -31,14 +31,16 @@ def _read_exact(stream,n):
     return data
 
 
-def frames(*, direct=False, opencv=False):
+def frames(*, direct=False, opencv=False, seconds=15):
+    if not 0 < seconds <= 60:
+        raise ValueError('Camera window must be in (0,60] seconds')
     import numpy as np
     python=sys.executable if opencv else os.environ.get('PET_VISION_IPC_PYTHON')
     if not python or not Path(python).is_file():
         raise RuntimeError('Set PET_VISION_IPC_PYTHON to verified native SDK Python')
     script=Path(__file__).resolve().parents[1]/'tools'/('run_pet_vision_camera.py' if opencv else 'run_pet_vision_ipc.py')
     flags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0
-    command=[python,str(script),'--pipe','--seconds','15']
+    command=[python,str(script),'--pipe','--seconds',str(seconds)]
     if opencv:
         command.append('--owner-approved')
     elif direct:
@@ -49,7 +51,7 @@ def frames(*, direct=False, opencv=False):
     process=subprocess.Popen(command,
                              stdout=subprocess.PIPE,creationflags=flags)
     # Outer deadline also covers native imports and lost IPC sources.
-    watchdog=threading.Timer(45,lambda:_stop_owned_process(process))
+    watchdog=threading.Timer(seconds+30,lambda:_stop_owned_process(process))
     watchdog.daemon=True
     watchdog.start()
     try:
@@ -78,11 +80,11 @@ def frames(*, direct=False, opencv=False):
         process.stdout.close()
 
 
-def leased_video_frames():
+def leased_video_frames(*, seconds=15):
     """Explicit opt-in only after media owner confirms an exclusive video lease."""
-    yield from frames(direct=True)
+    yield from frames(direct=True,seconds=seconds)
 
 
-def leased_opencv_frames():
+def leased_opencv_frames(*, seconds=15):
     """Windows DirectShow alternative; requires exclusive Reachy video lease."""
-    yield from frames(opencv=True)
+    yield from frames(opencv=True,seconds=seconds)

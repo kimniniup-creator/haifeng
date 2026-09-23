@@ -137,3 +137,14 @@ python -m pytest tests/test_pet_interaction.py tests/test_pet_interaction_integr
 第二次实机探测为动作owner转达：仅一个UUID完成，实测目标误差约1.081度，随后hold也有变化。实体目标到位/保持未通过，禁止据软件44测解除自动动作门禁。没有第三次设备操作授权，本QA不执行动作。
 
 启动脚本 `tools/run_pet_interaction.ps1` 静态审查不启动daemon/音频进程，显式开关控制设备/运动/语音订阅；令牌落在忽略目录、不在命令行回显。在线8091/7860状态均为owner报告，QA不访问或重启生产实例。
+
+## 视觉限时窗口 PR #5 增量审查（2026-09-24）
+
+[PR #5](https://github.com/kimniniup-creator/haifeng/pull/5) 固定提交 `df7db0dbfd04489cc5d12e2e1f6399944c0cfeba`，基于已合入的 main `5d8e66780b345aadcd66951b8ceae50f13d0c52c`。视觉实现与先前已审的 `c38788d` 一致；最终提交增加边界测试和诊断文档。独立源码快照执行 `python -m pytest -q tests/test_pet_vision.py tests/test_qa_seconds.py`：**48 passed，0 skipped，5.05秒**，其中仓库视觉测试26项、QA忽略目录内独立补测22项；真实模型空白帧用例实际运行。此前PR #4固定版本107项通过，本次按增量范围未重跑全套。
+
+- 默认窗口仍15秒，三个内置provider均支持显式60秒；0、负数、超过60、NaN、无穷值在启动子进程前拒绝。自定义provider不带seconds的既有调用保持兼容，显式seconds仅允许内置provider。
+- 独立补测通过mock验证时长传递、提前关闭、EOF、截断帧、watchdog回调及异常退出后的自有子进程清理、stdout关闭和timer取消；CLI退出关闭stream与detector。没有启动实际摄像头子进程。
+- 父进程watchdog为窗口时长加30秒，即默认45秒、60秒窗口对应90秒，包含启动余量；不能把60秒采集窗口描述成整个进程必在60秒内结束。
+- 动作诊断文档保持实测偏差与hold未通过的结论，没有新增动作实现或放宽approved。仓库public表述与Kim已授权状态一致。
+
+**结论：该固定版本无已知软件合并阻断，可由集成负责人按已有授权合并。** 本次不证明真人wave/palm识别、物理运动或hold通过，不改变motion dry-run、映射/profile未批准、相机默认关闭的边界；未访问设备、生产API，未重启8091服务。
