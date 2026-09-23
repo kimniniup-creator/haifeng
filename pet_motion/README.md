@@ -48,14 +48,14 @@ Candidates reference only listed assets from `docs/reachy-mapping/actions.json`:
 
 | Semantics | Candidate |
 |---|---|
-| attention / listening | emotions: attentive1 |
+| attention / listening | head_micro_nod custom profile |
 | thinking | emotions: thoughtful1 |
 | greeting / welcome | emotions: welcoming1 |
 | curious | emotions: curious1 |
-| acknowledge / affirm | dances: simple_nod |
+| acknowledge / affirm | head_micro_nod custom profile |
 | quiet / rest | no physical motion; no goto_sleep |
 
-These names express intent only. No claim of low amplitude, short duration,
+Recorded names express intent only. No claim of low amplitude, short duration,
 safe return, or embedded-audio behavior has been physically verified. The
 recorded endpoint offers no amplitude or duration scaling. All candidates are
 unapproved by default. Live execution requires **both** `dry_run=False` and
@@ -63,6 +63,45 @@ unapproved by default. Live execution requires **both** `dry_run=False` and
 exclusive device window. `execution_timeout` limits waiting and triggers stop;
 it does not scale/truncate a trajectory safely or guarantee successful return.
 Quiet/rest do not interrupt an already-running move; call cancel first if needed.
+
+### Measured micro profile
+
+`micro_profiles.json` (or constructor `micro_profile_path`) defines the custom
+attention/acknowledge path. It replaces their large recorded candidates, with no
+fallback to a recording. Default: **1.5 degrees around measured local Y**, 1.5 s
+per leg, profile peak speed 2 deg/s. Code enforces at most 2 degrees per measured
+segment and 3 deg/s minimum-jerk peak speed, at least 1.5 s per leg. A measured
+return error can lengthen the return leg to respect the profile speed limit.
+The formula uses the actual SDK's minimum-jerk peak derivative 1.875; the native
+goto route defaults to MIN_JERK even though it does not forward its interpolation
+field. This assumption must be rechecked after daemon upgrades.
+
+Both the semantic mapping and micro profile must be approved as well as live
+execution enabled. The profile is ready for the coordinator's single supervised
+probe; production approval awaits that evidence. Use at least 10 seconds TTL for
+the default probe; deliberately short TTLs are rejected before outward motion.
+Minimum TTL includes both segments, settling and one second margin.
+
+Each run reads measured full pose and motor/daemon/running state. It sends one
+goto UUID for the relative target, verifies measured arrival, then sends a second
+goto for the exact measured starting pose. It preserves translation, both
+antennas and body yaw, uses no fixed zero pose and no recorded audio. A completed
+event with no measured movement fails (including a daemon silently skipped goto).
+Arrival/return tolerances: 0.005 rad head/body rotation, 1 mm translation and
+0.01 rad antennas. These software thresholds do not prove physical accuracy.
+
+Cancel/expiry stops the current UUID, awaits terminal acknowledgement, then reads
+the current measured pose and applies it once via set_target as a hold. It never
+sends the return leg after cancellation. Hold requires no other running UUID and
+an `ok` response; ignored/failed/unconfirmed hold faults the executor. Unknown
+POST outcomes cannot safely be held without a UUID and remain faulted. If an
+event/measurement fails, no return is attempted. There is no global inter-client
+lock in goto, so exclusive ownership by the coordinator remains mandatory.
+
+Historical antenna +0.05 rad probe measured only +0.02761 rad (error 0.02239 rad),
+which failed its 0.015 rad criterion. This is why the new probe chooses head
+pitch rather than assuming a smaller antenna command is accurate. The head
+path is not yet physically verified either. See `ACCEPTANCE.md` for the window.
 
 ## Daemon contract and failure boundary
 
@@ -90,7 +129,7 @@ sleep, media release/acquire, sound playback, or service restart is performed.
 
 ## Validation and handoff
 
-Run `python -m pytest tests/test_pet_motion.py -q` with the repository test
+Run `python -m pytest tests/test_pet_motion.py tests/test_pet_motion_micro.py -q` with the repository test
 dependencies. Tests use an in-memory fake daemon and httpx MockTransport only;
 they never contact localhost or hardware. They cover correlation, queue bound,
 serialization, TTL, stale turns, stop during POST, disconnect, ambiguous start,

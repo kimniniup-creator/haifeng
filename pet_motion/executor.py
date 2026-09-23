@@ -28,7 +28,7 @@ class MotionExecutor:
     reconnect, retries, automatic motor enable, or sleep commands are used.
     """
     def __init__(self, transport=None, *, dry_run=True, capacity=4,
-                 mapping_path=None, history_limit=256, execution_timeout=20.0,
+                 mapping_path=None, micro_profile_path=None, history_limit=256, execution_timeout=20.0,
                  stop_timeout=4.0):
         if capacity < 1 or history_limit < capacity + 1:
             raise ValueError("capacity/history_limit too small")
@@ -39,7 +39,13 @@ class MotionExecutor:
         self.capacity, self.history_limit = capacity, history_limit
         self.execution_timeout, self.stop_timeout = execution_timeout, stop_timeout
         self.mappings = json.loads(Path(mapping_path or Path(__file__).with_name("mappings.json")).read_text(encoding="utf-8"))["actions"]
+        from .micro import validate_profile
+        self.micro_profiles = json.loads(Path(micro_profile_path or Path(__file__).with_name("micro_profiles.json")).read_text(encoding="utf-8"))["profiles"]
+        for profile in self.micro_profiles.values():
+            validate_profile(profile)
         for mapping in self.mappings.values():
+            if "micro_profile" in mapping and mapping["micro_profile"] not in self.micro_profiles:
+                raise ValueError("unknown micro profile")
             if mapping.get("action_id") is not None:
                 if not re.fullmatch(r"[\w-]+/[\w-]+", mapping.get("dataset", "")):
                     raise ValueError("invalid dataset")
@@ -125,12 +131,14 @@ class MotionExecutor:
         mapping = self.mappings.get(semantic)
         if mapping is None:
             return self._save(replace(result, reason="unknown_semantic"))
-        if mapping.get("action_id") is None:
+        if mapping.get("action_id") is None and "micro_profile" not in mapping:
             return self._save(replace(result, status="noop", reason="no_physical_motion"))
         if self.dry_run:
             return self._save(replace(result, status="dry_run", reason="candidate_not_executed"))
         if mapping.get("approved") is not True:
             return self._save(replace(result, reason="mapping_not_approved"))
+        if "micro_profile" in mapping and self.micro_profiles[mapping["micro_profile"]].get("approved") is not True:
+            return self._save(replace(result, reason="micro_profile_not_approved"))
         if len(self._queue) >= self.capacity:
             return self._save(replace(result, reason="queue_full"))
         result = replace(result, status="queued")
@@ -191,7 +199,7 @@ class MotionExecutor:
                 self._active = None
                 self._save(final)
 
-    async def _stop(self, session, uuid):
+    async def _stop(self, session, uuid, *, hold=False):
         try:
             async with asyncio.timeout(self.stop_timeout):
                 try:
@@ -205,18 +213,24 @@ class MotionExecutor:
                 if event not in {"move_cancelled", "move_completed"}:
                     self._trip("move_failed_during_stop")
                     return False
+                if hold:
+                    await session.hold_current()
             return True
         except Exception:
             self._trip("stop_unconfirmed")
             return False
 
-    async def _perform(self, result, deadline):
+    async def _perform(self, result, deadline, mapping=None):
+        mapping = mapping if mapping is not None else self.mappings[result.semantic_id]
+        if "micro_profile" in mapping:
+            from .micro import run_micro
+            return await run_micro(self, result, deadline, self.micro_profiles[mapping["micro_profile"]])
         uuid = None
         try:
             async with self.transport.session() as session:
                 if time.monotonic() >= deadline:
                     return replace(result, status="expired")
-                start = asyncio.create_task(session.start(self.mappings[result.semantic_id]))
+                start = asyncio.create_task(session.start(mapping))
                 try:
                     # Shield the POST so cancellation during its response can
                     # still recover the UUID and stop exactly that move.
@@ -227,7 +241,7 @@ class MotionExecutor:
                     except Exception:
                         self._trip("start_outcome_unknown")
                         return replace(result, status="failed", reason=self._fault)
-                    confirmed = await self._stop(session, uuid)
+                    confirmed = await self._stop(session, uuid, hold="_goto" in mapping)
                     return replace(result, uuid=uuid, status="cancelled" if confirmed else "failed", reason=self._fault)
                 self._save(replace(result, status="running", uuid=uuid), terminal=False)
                 try:
@@ -241,12 +255,12 @@ class MotionExecutor:
                     self._trip("move_failed")
                     return replace(result, status="failed", uuid=uuid, reason=self._fault)
                 except (asyncio.CancelledError, TimeoutError) as exc:
-                    confirmed = await self._stop(session, uuid)
+                    confirmed = await self._stop(session, uuid, hold="_goto" in mapping)
                     status = "cancelled" if isinstance(exc, asyncio.CancelledError) else "expired"
                     return replace(result, uuid=uuid, status=status if confirmed else "failed", reason=self._fault)
                 except Exception:
                     self._trip("event_stream_lost")
-                    await self._stop(session, uuid)
+                    await self._stop(session, uuid, hold="_goto" in mapping)
                     return replace(result, status="failed", uuid=uuid, reason=self._fault)
         except DaemonError as exc:
             if exc.uncertain:

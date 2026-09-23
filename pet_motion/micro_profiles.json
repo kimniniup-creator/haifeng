@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "profiles": {
+    "head_micro_nod": {
+      "approved": false,
+      "axis": "local_y",
+      "delta_degrees": 1.5,
+      "leg_seconds": 1.5,
+      "peak_speed_degrees_per_second": 2.0,
+      "settle_seconds": 1.0,
+      "note": "Measured-pose relative nod and return; no audio. Await supervised single probe before approval."
+    }
+  }
+}
