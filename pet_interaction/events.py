@@ -27,7 +27,7 @@ def turn_identifier(value):
 
 
 SOURCES = {
-    "vision": {"presence", "wave", "palm_stop"},
+    "vision": {"presence", "wave", "palm_stop", "face_presence", "visual_cue", "visual_unknown"},
     "voice": {"speech_final", "wake_word"},
     "operator": {"stop", "rest", "wake"},
 }

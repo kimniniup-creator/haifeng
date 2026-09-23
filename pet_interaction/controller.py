@@ -9,6 +9,8 @@ from collections import OrderedDict
 from .adapters import FakeMotion, FakeVoice, as_result
 from .events import Event, InvalidEvent, identifier, turn_identifier
 from .policy import RulePolicy
+from .visual_policy import VISUAL_KINDS
+from .visual_response import accept_visual, visual_receipt
 
 
 PRIORITY = {"presence": 10, "wave": 30, "wake_word": 60, "wake": 60, "speech_final": 70,
@@ -18,9 +20,12 @@ THRESHOLD = {"presence": 0.7, "wave": 0.7, "palm_stop": 0.7}
 
 
 class PetController:
-    def __init__(self, motion=None, voice=None, clock=time.time, capacity=2048, execution_budget_seconds=10):
+    def __init__(self, motion=None, voice=None, clock=time.time, capacity=2048, execution_budget_seconds=10, proactive=None):
         self.motion = motion or FakeMotion()
         self.voice = voice or FakeVoice()
+        self.proactive = proactive
+        self.visual_observation = None
+        self.proactive_link_error = None
         self.clock, self.capacity = clock, capacity
         if type(execution_budget_seconds) not in {int, float} or not 0 < execution_budget_seconds <= 30:
             raise ValueError("invalid_execution_budget")
@@ -53,6 +58,9 @@ class PetController:
 
     def snapshot(self):
         return {"state": self.state, "present": self.present, "hand_presence": self.present,
+                "visual_observation": self.visual_observation,
+                "proactive_connected": bool(self.proactive and self.proactive.connected),
+                "proactive_link_error": self.proactive_link_error,
                 "hand_visibility": "unknown" if self.present is None else ("visible" if self.present else "not_visible"), "stopped": self.stopped,
                 "voice_connected": self.voice_connected, "voice_context": self.voice_context, "voice_link_error": self.voice_link_error,
                 "active_decision_id": self.active_id, "closed": self.closed,
@@ -185,6 +193,8 @@ class PetController:
             return {"status": "suppressed", "reason": "out_of_order"}
         self.highwater = {k: v for k, v in self.highwater.items() if v[1] > now}
         self.highwater[order_key] = (event.observed_at, event.expires_at)
+        if event.kind in VISUAL_KINDS:
+            return await accept_visual(self, event, now)
         intent, voice_motion, sound = self.policy.classify(event.payload.get("text", "")) if event.source == "voice" else (event.kind, "attention", None)
         is_stop = event.kind in {"stop", "palm_stop"} or intent in {"stop", "quiet"}
         is_rest = event.kind == "rest" or intent == "rest"
@@ -344,6 +354,8 @@ class PetController:
     async def tick(self):
         """Expire observation state; deliberately no autonomous idle movement."""
         async with self.lock:
+            if self.visual_observation and self.clock() >= self.visual_observation['expires_at']:
+                self.visual_observation = None
             if self.output_id:
                 decision = self.decisions.get(self.output_id)
                 if decision is None or self.clock() >= decision["expires_at"]:
@@ -375,6 +387,17 @@ class PetController:
                 self.state = "resting" if self.rest_requested else ("attention" if self.present else "quiet")
             return {"status": "observed"}
 
+    async def visual_receipt(self, message):
+        async with self.lock:
+            return visual_receipt(self, message)
+
+    async def disconnect_proactive(self):
+        async with self.lock:
+            current = self.decisions.get(self.active_id or self.output_id, {})
+            if current.get('proactive_event_id'):
+                self._invalidate()
+                self.state = 'resting' if self.rest_requested else 'quiet'
+
     async def close(self):
         async with self.lock:
             self.closed = True
@@ -384,3 +407,5 @@ class PetController:
         await self.drain()
         await self.motion.close()
         await self.voice.close()
+        if self.proactive:
+            await self.proactive.close()

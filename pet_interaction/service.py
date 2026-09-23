@@ -29,6 +29,13 @@ def create_app(controller=None, tokens=None, voice_url=None):
                 await asyncio.sleep(0.2)
         expiry = asyncio.create_task(expiry_loop())
         link = asyncio.create_task(run_voice_link(controller, voice_url, shutdown)) if voice_url else None
+        proactive_link = asyncio.create_task(controller.proactive.run(controller, shutdown)) if controller.proactive else None
+        if proactive_link:
+            def proactive_done(task):
+                if not task.cancelled():
+                    error = task.exception()
+                    controller.proactive_link_error = type(error).__name__ if error else None
+            proactive_link.add_done_callback(proactive_done)
         if link:
             def link_done(task):
                 if not task.cancelled():
@@ -45,6 +52,9 @@ def create_app(controller=None, tokens=None, voice_url=None):
             if link:
                 link.cancel()
                 await asyncio.gather(link, return_exceptions=True)
+            if proactive_link:
+                proactive_link.cancel()
+                await asyncio.gather(proactive_link, return_exceptions=True)
             await controller.close()
 
     app = FastAPI(title="啾啾交互后端", lifespan=lifespan)
