@@ -84,7 +84,11 @@ Minimum TTL includes both segments, settling and one second margin.
 
 Each run reads measured full pose and motor/daemon/running state. It sends one
 goto UUID for the relative target, verifies measured arrival, then sends a second
-goto for the exact measured starting pose. It preserves translation, both
+goto for the measured starting pose. Native FK matrices with bounded numerical
+non-orthogonality (max R-transpose-R error and determinant error <=0.001) are
+projected onto SO(3) before rotation math; translation is untouched, and malformed
+or reflected matrices are rejected. Return uses this rigid representation of the
+original measurement, not a fixed zero pose. It preserves translation, both
 antennas and body yaw, uses no fixed zero pose and no recorded audio. A completed
 event with no measured movement fails (including a daemon silently skipped goto).
 Arrival/return tolerances: 0.005 rad head/body rotation, 1 mm translation and

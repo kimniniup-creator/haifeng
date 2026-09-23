@@ -30,8 +30,17 @@ def checked_pose(state):
     if antennas.shape != (2,) or not all(np.isfinite(v).all() for v in (head, antennas, yaw)):
         raise ValueError("invalid measured pose")
     rotation = head[:3, :3]
-    if not np.allclose(head[3], [0, 0, 0, 1], atol=1e-6) or not np.allclose(rotation.T @ rotation, np.eye(3), atol=1e-4) or abs(np.linalg.det(rotation)-1) > 1e-4:
+    # Native FK telemetry is slightly non-orthogonal (observed max R^T R-I
+    # 0.000607). Bound the raw error, then project only the rotation onto SO(3),
+    # as SDK rotation interpolation also requires a proper rigid rotation.
+    if not np.allclose(head[3], [0, 0, 0, 1], atol=1e-6) or np.max(np.abs(rotation.T @ rotation - np.eye(3))) > .001 or abs(np.linalg.det(rotation)-1) > .001:
         raise ValueError("invalid measured rotation")
+    u, _, vt = np.linalg.svd(rotation)
+    rigid = u @ vt
+    if np.linalg.det(rigid) <= 0 or np.max(np.abs(rigid - rotation)) > .001:
+        raise ValueError("invalid measured rotation projection")
+    head = head.copy()
+    head[:3, :3] = rigid
     return {"head": head, "antennas": antennas, "body_yaw": yaw}
 
 
