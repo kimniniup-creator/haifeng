@@ -4,7 +4,8 @@ import secrets
 from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .config import settings
@@ -37,11 +38,12 @@ def local_only(request: Request) -> None:
     host = host_header[1:].split("]", 1)[0] if host_header.startswith("[") else host_header.split(":", 1)[0]
     if client not in {"127.0.0.1", "::1", "localhost"} or host not in {"127.0.0.1", "::1", "localhost"}:
         raise HTTPException(403, "LOOPBACK_ONLY")
+    fetch_site = request.headers.get("sec-fetch-site")
+    if fetch_site and fetch_site.lower() not in {"same-origin", "none"}:
+        raise HTTPException(403, "SAME_ORIGIN_REQUIRED")
     origin = request.headers.get("origin")
-    if origin:
-        parsed = urlparse(origin)
-        if parsed.scheme not in {"http", "https"} or parsed.hostname not in {"127.0.0.1", "::1", "localhost"}:
-            raise HTTPException(403, "LOOPBACK_ORIGIN_REQUIRED")
+    if origin and origin.rstrip("/") != f"{request.url.scheme}://{host_header}".rstrip("/"):
+        raise HTTPException(403, "SAME_ORIGIN_REQUIRED")
 
 
 class SessionRequest(BaseModel):
@@ -80,6 +82,7 @@ async def lifespan(_app: FastAPI):
 
 APP_VERSION = "2.1.0"
 app = FastAPI(title="Luma Reachy Bridge", version=APP_VERSION, lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 
 @app.get("/v1/health")
@@ -90,7 +93,7 @@ async def health():
 @app.get("/v1/bootstrap", dependencies=[Depends(local_only)])
 async def bootstrap():
     """Loopback-only handoff for the bundled local web application."""
-    return {"token": settings.bridge_token, "model": settings.model_status()}
+    return JSONResponse({"token": settings.bridge_token, "model": settings.model_status()}, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/v1/status", dependencies=[Depends(auth)])
@@ -137,7 +140,7 @@ async def rename_session(session_id: str, request: SessionRequest):
 async def session_history(session_id: str):
     if not store.session_exists(session_id):
         raise HTTPException(404, "SESSION_NOT_FOUND")
-    return {"session_id": session_id, "messages": store.history(session_id, limit=100)}
+    return {"session_id": session_id, "messages": store.history(session_id, limit=100), "images": store.images(session_id)}
 
 
 @app.get("/v1/sessions/{session_id}", dependencies=[Depends(auth)])
@@ -145,7 +148,7 @@ async def get_session(session_id: str):
     session = store.session(session_id)
     if not session:
         raise HTTPException(404, "SESSION_NOT_FOUND")
-    return {**session, "messages": store.history(session_id, limit=100)}
+    return {**session, "messages": store.history(session_id, limit=100), "images": store.images(session_id)}
 
 
 @app.delete("/v1/sessions/{session_id}", status_code=204, dependencies=[Depends(auth)])
@@ -168,6 +171,8 @@ async def upload_image(session_id: str, source: str = "manual_upload", file: Upl
     if source not in {"manual_upload", "glasses_ble", "glasses_wifi"}:
         raise HTTPException(422, "SOURCE_INVALID")
     content = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "IMAGE_TOO_LARGE")
     try:
         image = media.save(content, source)
     except ValueError as exc:

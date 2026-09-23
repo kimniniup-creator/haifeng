@@ -23,11 +23,11 @@ class RequestWorker:
             self._runner = asyncio.create_task(self._run(), name="haifeng-request-worker")
 
     async def stop(self) -> None:
+        self.store.interrupt_unfinished()
         if self._active_task and not self._active_task.done():
             self._active_task.cancel()
         if hasattr(self.luma, "cancel"):
             await self.luma.cancel()
-        self.store.interrupt_unfinished()
         if self._runner:
             await self.queue.put(None)
             try:
@@ -36,8 +36,14 @@ class RequestWorker:
                 pass
 
     async def cancel_session(self, session_id: str) -> None:
+        active_task = self._active_task if self._active_request_id and self.store.get_request(self._active_request_id)["session_id"] == session_id else None
         for request_id in self.store.active_request_ids(session_id):
             await self.cancel(request_id)
+        if active_task and not active_task.done():
+            try:
+                await active_task
+            except asyncio.CancelledError:
+                pass
 
     async def submit(self, *, session_id: str, client_request_id: str, kind: str, text: str | None, image_id: str | None) -> str:
         request_hash = hashlib.sha256(json.dumps({"kind": kind, "text": text, "image_id": image_id}, sort_keys=True).encode()).hexdigest()
@@ -55,7 +61,7 @@ class RequestWorker:
 
     async def cancel(self, request_id: str) -> None:
         row = self.store.get_request(request_id)
-        if not row or row["status"] not in {"queued", "capturing", "media_ready", "thinking", "answer_ready"}:
+        if not row or row["status"] not in {"queued", "capturing", "media_ready", "thinking", "answer_ready", "responding"}:
             return
         self.store.update_request(request_id, status="cancelled", error_code="CANCELLED")
         if request_id == self._active_request_id:
@@ -119,6 +125,8 @@ class RequestWorker:
             self.store.add_message(row["session_id"], request_id, "assistant", answer, image_id)
             self.store.update_request(request_id, status="answer_ready", answer_text=answer)
             self._ensure_live(request_id)
+            self.store.update_request(request_id, status="responding")
+            self._ensure_live(request_id)
             respond = getattr(self.robot, "respond", None)
             if self.robot is None:
                 robot_result = {"motion_status": "not_configured", "error_code": "ROBOT_NOT_CONFIGURED"}
@@ -126,11 +134,14 @@ class RequestWorker:
                 robot_result = await respond(answer) if respond else await self.robot.acknowledge()
             self._ensure_live(request_id)
             motion = (robot_result or {}).get("motion_status")
-            final_status = "completed" if motion in {"completed", "succeeded", "success"} else "completed_with_errors"
+            audio = (robot_result or {}).get("audio_status")
+            motion_ok = motion in {"completed", "succeeded", "success"}
+            audio_ok = audio in {None, "completed", "succeeded", "success", "disabled", "not_requested"}
+            final_status = "completed" if motion_ok and audio_ok else "completed_with_errors"
             self.store.update_request(request_id, status=final_status, robot_json=json.dumps(robot_result or {}))
         except (asyncio.CancelledError, RequestCancelled):
             row = self.store.get_request(request_id)
-            if row and row["status"] != "cancelled":
+            if row and row["status"] not in {"cancelled", "interrupted"}:
                 self.store.update_request(request_id, status="cancelled", error_code="CANCELLED")
         except Exception as exc:
             self.store.update_request(request_id, status="failed", error_code=(str(exc).split(":", 1)[0] or "REQUEST_FAILED"))
