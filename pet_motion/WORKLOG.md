@@ -68,3 +68,15 @@ after the numerical-pose fix, with independent regression coverage.
   fresh request can return after event expiry; new turn cancels active budget;
   slow preflight crossing original deadline makes zero submissions; invalid
   budget/expired absolute deadlines rejected.
+
+## Read-only diagnosis handoff
+
+Native source and offline AnalyticalKinematics replay checked matrix ordering,
+local axis, units, body yaw, minjerk default, warm/cold FK and model roundtrip.
+Saved target is exactly local Y +1.5 degrees; actual rotation has cross-axis
+components. Warm offline model residual ~0.010 degrees does not explain the live
+~1.081-degree error. Desired-joint fields are silently dropped by native
+FullState despite route flags, so tracking/offset hypotheses remain unproven.
+Later stationary reads show no large continuing drift. DIAGNOSIS.md records
+falsifiable hypotheses and read-only instrumentation prerequisites before any
+future device window. No motion or device-state changes during this analysis.
