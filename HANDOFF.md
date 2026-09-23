@@ -117,3 +117,12 @@ Kim changed target during testing: tentative name 啾啾, short mechanical speci
 
 ## 啾啾本地声音交接 — 2026-09-24
 Current service: independent pet_companion.py on 127.0.0.1:7860, SenseVoice Chinese + Silero VAD + original mechanical chirps. See patches/reachy_companion/README.md for exact startup, rollback, test and Agent transport details. Old official Conversation App is stopped; daemon and bridge are unchanged. No dedicated wake word yet. Agent consumer must subscribe on /events before responding via /api/agent-result; no second speech engine should be started. Turn identity is authoritative in voice service. Completed output receipt means last buffer submission, not physical audibility. Live semantic/backend integration, room ASR and natural interruption remain acceptance limits.
+# 2026-09-24 desktop no-wake correction (offline)
+
+The daemon `--no-wake-up-on-start` flag alone does not prevent the desktop frontend
+from sending enable + wake after startup. Earlier no-wake conclusions omitted
+StartingView's completion callback and are withdrawn. Source-only patch and its
+pinned upstream trace are in `patches/reachy_desktop_no_autowake/README.md`.
+No running application was changed or restarted; no device action was sent.
+Focused callback tests pass, while full desktop build, visual QA and supervised
+physical deployment acceptance remain pending. Preserve the current live state.

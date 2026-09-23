@@ -1,0 +1,7 @@
+{
+  "upstream_commit": "f520136ffe9b54ba6e34a6d5b4da4781cfd55ab8",
+  "version": "0.9.32",
+  "path": "src/views/starting/StartingView.tsx",
+  "original_sha256_lf": "d845efa826627bc397a296030c74c76cbf57fa4d2790cb70fb504b76885e6e89",
+  "patched_sha256_lf": "e1457da162031b7ae0a648bc000e1252d7fb49b71df251d5ee8a65fe5a09c2c0"
+}
