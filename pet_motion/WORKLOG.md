@@ -120,3 +120,7 @@ LOOK_UP.md is the cross-owner and second-host interface handoff.
 ## Bounded independent diagnosis delivered
 - Current logs, three paired GET samples, and native source narrow the issue without claiming a hardware root cause. Loop and feedback are active; ik_required remains true by design; neutral target follows logged desktop wake-up. Cached enabled/error-null is not verified motor readback.
 - Four offline AST/fake-controller checks pass. Added reproducible source-only checker; documented candidate falsification and minimal cached-field then motor-readback experiment in DIAGNOSIS.md. No device writes or native modifications.
+
+## Cached branch diagnostics ready for maintenance review
+- Added four attribute-only fields with explicit cached/unknown semantics, preserving schema and existing fields. No hardware getters, controller access, added tick counters, installation or process changes.
+- Focused telemetry tests: 5 passed (one existing benign dependency warning), including a controller object that raises on every access and missing fields remaining null. Native running helper is unchanged.

@@ -34,6 +34,10 @@ def snapshot(backend):
         "effective_target_pose": "_last_target_head_pose",
         "effective_body_yaw": "_last_target_body_yaw",
         "speech_offsets": "_speech_offsets",
+        # Python dispatch gates, not motor-side torque/mode readback.
+        "torque_enabled_cached": "_torque_enabled",
+        "head_operation_mode_cached": "_current_head_operation_mode",
+        "antennas_operation_mode_cached": "_current_antennas_operation_mode",
     }
     before = {key: plain(getattr(backend, attr, None)) for key, attr in fields.items()}
     after = {key: plain(getattr(backend, attr, None)) for key, attr in fields.items()}
@@ -44,6 +48,9 @@ def snapshot(backend):
             "control_mode": mode, "error": str(backend.error) if backend.error else None,
             "kinematics_engine": getattr(backend, "kinematics_engine", None),
             "ik_required": bool(getattr(backend, "ik_required", False)),
+            # Live backend scalar, unlike RobotBackendStatus.last_alive. Keep
+            # tick freshness outside stable_read: a normal tick may advance it.
+            "last_alive_unix": plain(getattr(backend, "last_alive", None)),
             # Private depth is a scalar; avoid invoking locking or move methods.
             "active_move_depth": plain(getattr(backend, "_active_move_depth", None))}
 
