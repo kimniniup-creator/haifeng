@@ -41,7 +41,7 @@ def test_real_openai_adapter_request_and_strict_parse(tmp_path, response_format)
 
 def test_robot_upload_play_accepted_and_stop(tmp_path):
     async def check():
-        robot=Robot(Config());await robot.http.aclose();calls=[]
+        robot=Robot(Config(speech_enabled=True));await robot.http.aclose();calls=[]
         def handler(request):
             calls.append(request.url.path)
             if request.url.path.endswith('/sounds/upload'):

@@ -22,6 +22,7 @@ class Config:
     reachy_url: str = os.getenv('REACHY_API_URL', 'http://127.0.0.1:8000').rstrip('/')
     reachy_mode: str = os.getenv('REACHY_MODE', 'real')
     motion_enabled: bool = os.getenv('ROBOT_MOTION_ENABLED', 'false').lower() == 'true'
+    speech_enabled: bool = os.getenv('ROBOT_SPEECH_ENABLED', 'true').lower() == 'true'
     voice: str = os.getenv('TTS_VOICE_ID', '')
     rate: int = int(os.getenv('TTS_RATE', '170'))
     agent_host: str = os.getenv('AGENT_HOST', '127.0.0.1')

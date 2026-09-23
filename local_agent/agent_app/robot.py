@@ -43,10 +43,25 @@ class Robot:
             status = await self.http.get('/api/daemon/status')
             status.raise_for_status()
             state = status.json()
-            ready = (state.get('backend_status') or {}).get('ready') is True
+            backend = state.get('backend_status') or {}
+            declared = backend.get('ready') is True
+            # Native daemon 1.8.0 reports backend_status.ready/last_alive from a
+            # field its own get_status never refreshes, so an unset flag is not
+            # evidence of a dead robot. Fall back to live control-loop signals a
+            # stopped or faulted controller cannot produce.
+            stats = backend.get('control_loop_stats') or {}
+            frequency = stats.get('mean_control_loop_frequency')
+            live = (state.get('state') == 'running'
+                    and backend.get('motor_control_mode') == 'enabled'
+                    and backend.get('error') is None and state.get('error') is None
+                    and isinstance(frequency, (int, float)) and frequency > 1)
+            ready = declared or live
             return {'reachable': True, 'ready': ready, 'missing_routes': missing,
                     'daemon_state': state.get('state'),
-                    'backend_ready': ready,
+                    'backend_ready': declared,
+                    'ready_basis': 'declared' if declared else 'control_loop' if live else 'none',
+                    'control_loop_hz': frequency,
+                    'control_loop_errors': stats.get('nb_error'),
                     'media_released': state.get('media_released'),
                     'version': state.get('version'), 'state': state,
                     'mode': self.cfg.reachy_mode}
@@ -110,6 +125,10 @@ class Robot:
         return {'status':'completed', 'confirmation':'daemon_move_events'}
 
     async def play(self, path):
+        if not self.cfg.speech_enabled:
+            # acquire() takes the daemon camera/audio lease away from whichever
+            # process currently owns it. Never do that implicitly.
+            return {'status': 'suppressed', 'detail': 'ROBOT_SPEECH_DISABLED'}
         # The remote daemon can release camera/audio resources while idle.
         # acquire is idempotent and must precede upload/play on that host.
         acquired = await self.http.post('/api/media/acquire')

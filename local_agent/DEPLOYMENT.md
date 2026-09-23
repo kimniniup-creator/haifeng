@@ -59,3 +59,60 @@
 curiosity → roll 6° → 回中。仍返回 ROBOT_NOT_READY，没有设备动作。
 `ROBOT_MOTION_ENABLED=false` 独立门禁保证即使原生ready字段后续修复，也不会自动开启
 尚未通过物理验证的动作。最终运行PID45980，唯一回环8765监听。
+
+## 2026-09-24 实机动作已打通（覆盖上文"机器人实际动作未通过验收"）
+
+Kim 明确授权小幅实机验证后完成。上文 ROBOT_NOT_READY 与
+`ROBOT_MOTION_ENABLED=false` 的结论到此为止，以本节为准。
+
+### 卡点根因
+
+`Robot.capabilities()` 原本只认 `backend_status.ready is True`。原生 daemon 1.8.0
+的 `get_status` 从不刷新该字段，它恒为 false，`last_alive` 恒为 null，于是每一轮
+都在 `respond()` 里退化成 ROBOT_NOT_READY，动作和语音都没送出去。这不是机器人
+掉线：同一时刻 `state=running`、`motor_control_mode=enabled`、`error=null`、
+控制环 32Hz、`nb_error=0`、`present_head_pose` 持续刷新。
+
+改为：`ready = 声明值 or 实时控制环证据`。实时证据要求 state 为 running、电机模式
+enabled、daemon 与 backend 的 error 均为 null、平均控制环频率大于 1Hz。响应里同时
+返回 `backend_ready`（daemon 原始声明值）和 `ready_basis`（declared / control_loop /
+none），不掩盖原始字段。停机、电机 disabled、有 error、控制环为 0 或缺失统计时仍为
+false，各有回归测试。
+
+### 两道门禁的现状
+
+- `ROBOT_MOTION_ENABLED=true`：本机 `.env` 已开，经 Kim 当面授权。默认仍为 false。
+- `ROBOT_SPEECH_ENABLED`：新增，默认 true 以保持上游行为；**本机设为 false**。
+  `robot.play()` 会先调 `/api/media/acquire`，那会把 daemon 的相机/音频租约从当前
+  持有者手里抢走，而音频属主是 7860 的语音服务。本机因此不隐式发声，
+  `speech` 如实显示 `suppressed / ROBOT_SPEECH_DISABLED`，不是失败。
+
+### 实机证据
+
+1. 单段授权探针：指令 pitch 3°（0.052360 rad），WebSocket 收到
+   `move_started` → `move_completed`，实测位移 0.052604 rad，偏差 0.000244 rad。
+2. `e2e-motion-01`，眼镜实拍新图 `img_022d739bbe34489f926878c1000aa6c9`：
+   response_emotion `curiosity` + 可见依据 → selected `curiosity` →
+   `head_gesture [[0,6],[0,0]]` → `motion: completed / daemon_move_events`。
+   roll 峰值偏移实测 0.10235 rad，指令 0.10472 rad。
+3. `e2e-motion-02` 复现同一结论，`motion: completed`。
+   两轮 `speech` 均为 suppressed，未占用音频设备。
+4. 63 项测试通过（新增就绪判定回退 1 项、无实时证据不放行 5 项、音频租约门禁 1 项）。
+
+### 仍未验收
+
+- **不是精度验收。** 位姿采样间隔 0.2–0.35 秒，可能错过真实峰值；第一轮后
+  roll 静止读数一次性偏移约 +0.028 rad，第二轮残差仅 -0.0035 rad，两轮内未见累积
+  漂移，但这不足以断言机械精度合格。
+- 实体声音未触发，物理可闻性仍未验证。
+- `inspect_image` 会写入更新的观察，但任务落库的观察仍是该图第一次的结果，
+  情绪映射用的是第一次观察。当前是确定性行为，未改动。
+- 上游 `Agent/emo_action` 的六类映射只覆盖小幅头部轨迹，不等于 85 情绪或
+  34 舞蹈已映射或验收。
+
+### 启动方式（已改）
+
+`start.ps1` 在前台运行，随启动它的终端一起退出。新增
+`start_detached.cmd`：切到工程目录、以 `.venv` 解释器运行 `-m agent_app`、
+日志追加到已忽略的 `data\service.log`。需要脱离终端时用
+`Invoke-CimMethod Win32_Process Create` 调用它，进程不再挂在终端进程树下。

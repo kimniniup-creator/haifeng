@@ -52,7 +52,7 @@ class FakeMedia(Media):
 
 @pytest.fixture
 def client(tmp_path):
-    cfg=Config(root=tmp_path,data=tmp_path/'data',token='test-secret',api_key='test',reachy_mode='real', auto_memory=True,
+    cfg=Config(root=tmp_path,data=tmp_path/'data',token='test-secret',api_key='test',reachy_mode='real', auto_memory=True, speech_enabled=True,
         allowed_hosts=('localhost','127.0.0.1','private'))
     app=create_app(cfg,FakeModels,FakeRobot,FakeMedia)
     with TestClient(app,headers={'Authorization':'Bearer test-secret'}) as c:

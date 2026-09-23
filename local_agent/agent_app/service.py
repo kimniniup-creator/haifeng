@@ -246,10 +246,13 @@ class Service:
             self.store.effect(jid,'partial',result)
             return result
         audio = None
-        try:
-            audio, seconds = await self.media.tts(args.text)
-        except Exception as e:
-            result['speech']={'status':'failed','error':str(e)[:250]}
+        if not self.cfg.speech_enabled:
+            result['speech']={'status':'suppressed','detail':'ROBOT_SPEECH_DISABLED'}
+        else:
+            try:
+                audio, seconds = await self.media.tts(args.text)
+            except Exception as e:
+                result['speech']={'status':'failed','error':str(e)[:250]}
         self.check(jid)
         try:
             result['motion'] = await self.robot.express(expression)

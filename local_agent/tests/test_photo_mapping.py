@@ -1,4 +1,6 @@
 import asyncio
+from pathlib import Path
+
 import pytest
 from agent_app.config import Config
 from agent_app.contracts import Respond, JobRequest
@@ -52,5 +54,73 @@ def test_motion_stays_disabled_independently_of_daemon_ready():
             raise AssertionError('Must not submit a hardware movement')
         robot.segment = forbidden
         assert (await robot.express('curiosity'))['detail'] == 'PHYSICAL_MOTION_NOT_VERIFIED'
+        await robot.close()
+    asyncio.run(run())
+
+
+def _daemon_client(status_payload):
+    import httpx
+    from agent_app.robot import REQUIRED
+
+    def handler(request):
+        if request.url.path == '/openapi.json':
+            return httpx.Response(200, json={'paths': {p: {m: {}} for p, m in REQUIRED.items()}})
+        if request.url.path == '/api/daemon/status':
+            return httpx.Response(200, json=status_payload)
+        raise AssertionError('unexpected request ' + request.url.path)
+
+    return httpx.AsyncClient(base_url='http://daemon.invalid',
+                             transport=httpx.MockTransport(handler))
+
+
+RUNNING_LOOP = {'nb_error': 0, 'mean_control_loop_frequency': 32.1}
+
+
+def test_ready_falls_back_to_live_control_loop_when_daemon_flag_is_stale():
+    from agent_app.robot import Robot
+    async def run():
+        robot = Robot(Config(reachy_mode='real'))
+        await robot.http.aclose()
+        # Native 1.8.0 leaves ready False forever while the controller really runs.
+        robot.http = _daemon_client({'state': 'running', 'error': None, 'version': '1.8.0',
+            'backend_status': {'ready': False, 'motor_control_mode': 'enabled', 'error': None,
+                               'control_loop_stats': RUNNING_LOOP}})
+        caps = await robot.capabilities()
+        assert caps['ready'] is True
+        assert caps['backend_ready'] is False
+        assert caps['ready_basis'] == 'control_loop'
+        await robot.close()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('state,backend', [
+    ('stopped', {'ready': False, 'motor_control_mode': 'enabled', 'error': None, 'control_loop_stats': RUNNING_LOOP}),
+    ('running', {'ready': False, 'motor_control_mode': 'disabled', 'error': None, 'control_loop_stats': RUNNING_LOOP}),
+    ('running', {'ready': False, 'motor_control_mode': 'enabled', 'error': 'motor timeout', 'control_loop_stats': RUNNING_LOOP}),
+    ('running', {'ready': False, 'motor_control_mode': 'enabled', 'error': None, 'control_loop_stats': {'nb_error': 0, 'mean_control_loop_frequency': 0}}),
+    ('running', {'ready': False, 'motor_control_mode': 'enabled', 'error': None}),
+])
+def test_ready_stays_false_without_live_control_evidence(state, backend):
+    from agent_app.robot import Robot
+    async def run():
+        robot = Robot(Config(reachy_mode='real'))
+        await robot.http.aclose()
+        robot.http = _daemon_client({'state': state, 'error': None, 'backend_status': backend})
+        caps = await robot.capabilities()
+        assert caps['ready'] is False
+        assert caps['ready_basis'] == 'none'
+        await robot.close()
+    asyncio.run(run())
+
+
+def test_speech_gate_never_takes_the_shared_audio_lease():
+    from agent_app.robot import Robot
+    async def run():
+        robot = Robot(Config(reachy_mode='real', speech_enabled=False))
+        async def forbidden(*args, **kwargs):
+            raise AssertionError('Must not touch the daemon media lease')
+        robot.http.post = forbidden
+        result = await robot.play(Path('unused.wav'))
+        assert result == {'status': 'suppressed', 'detail': 'ROBOT_SPEECH_DISABLED'}
         await robot.close()
     asyncio.run(run())
