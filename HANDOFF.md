@@ -48,3 +48,4 @@ Luma没有现场发现；上游有E06-0055真机验证记录，本机未复验�
 - 重启后未播放表情即USB Pipe error+camera error+九电机失联，daemon error。用户已被请求断电重插供电/USB、直连电脑；收到完成反馈再做有限小幅验证。不要反复重启或强制大动作；不要把UI Ready/HTTP200当作硬件健康。
 - 最新状态覆盖前项阻塞：用户完成物理重连，官方updater已升1.11，补丁已重新适配安装，12项软件测试通过且helper安装哈希一致。真实连接恢复running/ready，error=null，队列空；保持官方客户端唯一daemon。
 - 小幅+0.05rad实际+0.0276117rad，偏差超过0.015rad探测验收门槛；返回起点成功。未做更大/连续完整表情，不能称整机稳定或精度通过。原始记录.runtime/expression-small-motion.json；下一步仅在明确机械/精度原因后扩展实机验收。用户询问说话无应答，已说明当前未装对话应用，LISTENING不等于语音助手运行。
+- 最终UI仍Connecting/Healthcheck，后台state/full与status健康；远端目录/TURN/updater网络异常，刷新未解决，尚待继续客户端启动链排查。不要报告整套界面已稳定可用。补丁提交e616040已推送，后续记录独立提交。

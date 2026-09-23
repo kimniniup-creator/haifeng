@@ -61,3 +61,4 @@
 - 07:41:58 UTC尚未发送表情即再次出现DoA USB Pipe error、相机中断、全部电机读失败；后台error，UI状态不能信。已请用户断电插牢供电及USB、尽量直连，等待物理重连后继续。未校准/固件/重置/强制复位，未启动第二daemon。
 - 后续：用户完成物理重连；官方updater在07:42将两个客户端环境升级1.11，覆盖首轮补丁。保留新版，按同一router哈希适配1.8/1.11，新增1.11原生stop flag兼容；12项测试通过，重新安装重启，安装helper与源码SHA256相同。
 - 实机小幅验证：要求+0.05rad，实测+0.0276117rad，目标偏差0.0223883rad超过本次0.015rad验收门槛；返回起点编码器值一致。未扩大动作、未做连续完整表情验收。末态running/ready/enabled、error=null、nb_error=0、队列空。精度不达标不能直接判定硬件损坏；语音未回应因客户端暂无对话应用，已向用户说明。
+- 收口新增限制：后台/api/daemon/status和/api/state/full均200且真实running/ready，但客户端窗口仍停Connecting/Healthcheck，Ctrl+R后未恢复；日志有远端TURN/HF/updater网络超时或TLS错误。不能把后台恢复等同界面可用；本轮不再反复重启硬件。Git默认TLS推送失败两次后，以单次http.version=HTTP/1.1成功推送e616040，未关闭证书校验或修改全局Git配置。
