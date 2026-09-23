@@ -1,0 +1,1376 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Reachy motion mapping API snapshot",
+    "version": "2026-09-23"
+  },
+  "paths": {
+    "/api/daemon/status": {
+      "get": {
+        "summary": "Get Daemon Status",
+        "description": "Get the current status of the daemon.",
+        "operationId": "get_daemon_status_api_daemon_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/motors/status": {
+      "get": {
+        "summary": "Get Motor Status",
+        "description": "Get the current status of the motors.",
+        "operationId": "get_motor_status_api_motors_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MotorStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/move/running": {
+      "get": {
+        "summary": "Get Running Moves",
+        "description": "Get a list of currently running move tasks.",
+        "operationId": "get_running_moves_api_move_running_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MoveUUID"
+                  },
+                  "type": "array",
+                  "title": "Response Get Running Moves Api Move Running Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/move/goto": {
+      "post": {
+        "summary": "Goto",
+        "description": "Request a movement to a specific target.",
+        "operationId": "goto_api_move_goto_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GotoModelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoveUUID"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/move/play/wake_up": {
+      "post": {
+        "summary": "Play Wake Up",
+        "description": "Request the robot to wake up.",
+        "operationId": "play_wake_up_api_move_play_wake_up_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoveUUID"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/move/play/goto_sleep": {
+      "post": {
+        "summary": "Play Goto Sleep",
+        "description": "Request the robot to go to sleep.",
+        "operationId": "play_goto_sleep_api_move_play_goto_sleep_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoveUUID"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/move/recorded-move-datasets/list/{dataset_name}": {
+      "get": {
+        "summary": "List Recorded Move Dataset",
+        "description": "List available recorded moves in a dataset.",
+        "operationId": "list_recorded_move_dataset_api_move_recorded_move_datasets_list__dataset_name__get",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response List Recorded Move Dataset Api Move Recorded Move Datasets List  Dataset Name  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/move/play/recorded-move-dataset/{dataset_name}/{move_name}": {
+      "post": {
+        "summary": "Play Recorded Move Dataset",
+        "description": "Request the robot to play a predefined recorded move from a dataset.",
+        "operationId": "play_recorded_move_dataset_api_move_play_recorded_move_dataset__dataset_name___move_name__post",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          },
+          {
+            "name": "move_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Move Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoveUUID"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/move/stop": {
+      "post": {
+        "summary": "Stop Move",
+        "description": "Stop a running move task.",
+        "operationId": "stop_move_api_move_stop_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveUUID"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Stop Move Api Move Stop Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/move/set_target": {
+      "post": {
+        "summary": "Set Target",
+        "description": "POST route to set a single FullBodyTarget.",
+        "operationId": "set_target_api_move_set_target_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FullBodyTarget"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Set Target Api Move Set Target Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/state/present_head_pose": {
+      "get": {
+        "summary": "Get Head Pose",
+        "description": "Get the present head pose.\n\nArguments:\n    use_pose_matrix (bool): Whether to use the pose matrix representation (4x4 flattened) or the translation + Euler angles representation (x, y, z, roll, pitch, yaw).\n    backend (Backend): The backend instance.\n\nReturns:\n    AnyPose: The present head pose.",
+        "operationId": "get_head_pose_api_state_present_head_pose_get",
+        "parameters": [
+          {
+            "name": "use_pose_matrix",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Use Pose Matrix"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/XYZRPYPose"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Matrix4x4Pose"
+                    }
+                  ],
+                  "title": "Response Get Head Pose Api State Present Head Pose Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/state/present_body_yaw": {
+      "get": {
+        "summary": "Get Body Yaw",
+        "description": "Get the present body yaw (in radians).",
+        "operationId": "get_body_yaw_api_state_present_body_yaw_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "number",
+                  "title": "Response Get Body Yaw Api State Present Body Yaw Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/state/present_antenna_joint_positions": {
+      "get": {
+        "summary": "Get Antenna Joint Positions",
+        "description": "Get the present antenna joint positions (in radians) - (left, right).",
+        "operationId": "get_antenna_joint_positions_api_state_present_antenna_joint_positions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "type": "array",
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "title": "Response Get Antenna Joint Positions Api State Present Antenna Joint Positions Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/state/doa": {
+      "get": {
+        "summary": "Get Doa",
+        "description": "Get the Direction of Arrival from the microphone array.\n\nReturns the angle in radians (0=left, π/2=front, π=right) and speech detection status.\nReturns None if the audio device is not available.",
+        "operationId": "get_doa_api_state_doa_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DoAInfo"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Doa Api State Doa Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/state/full": {
+      "get": {
+        "summary": "Get Full State",
+        "description": "Get the full robot state, with optional fields.",
+        "operationId": "get_full_state_api_state_full_get",
+        "parameters": [
+          {
+            "name": "with_control_mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "With Control Mode"
+            }
+          },
+          {
+            "name": "with_head_pose",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "With Head Pose"
+            }
+          },
+          {
+            "name": "with_target_head_pose",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "With Target Head Pose"
+            }
+          },
+          {
+            "name": "with_head_joints",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "With Head Joints"
+            }
+          },
+          {
+            "name": "with_target_head_joints",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "With Target Head Joints"
+            }
+          },
+          {
+            "name": "with_body_yaw",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "With Body Yaw"
+            }
+          },
+          {
+            "name": "with_target_body_yaw",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "With Target Body Yaw"
+            }
+          },
+          {
+            "name": "with_antenna_positions",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "With Antenna Positions"
+            }
+          },
+          {
+            "name": "with_target_antenna_positions",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "With Target Antenna Positions"
+            }
+          },
+          {
+            "name": "with_passive_joints",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "With Passive Joints"
+            }
+          },
+          {
+            "name": "with_doa",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "With Doa"
+            }
+          },
+          {
+            "name": "use_pose_matrix",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Use Pose Matrix"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FullState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health-check": {
+      "post": {
+        "summary": "Health Check",
+        "description": "Health check endpoint to reset the health check timer.",
+        "operationId": "health_check_health_check_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Check Health Check Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DaemonStatus": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "daemon_status",
+            "title": "Type",
+            "default": "daemon_status"
+          },
+          "robot_name": {
+            "type": "string",
+            "title": "Robot Name"
+          },
+          "state": {
+            "$ref": "#/components/schemas/DaemonState"
+          },
+          "wireless_version": {
+            "type": "boolean",
+            "title": "Wireless Version"
+          },
+          "desktop_app_daemon": {
+            "type": "boolean",
+            "title": "Desktop App Daemon"
+          },
+          "simulation_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Simulation Enabled"
+          },
+          "mockup_sim_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mockup Sim Enabled"
+          },
+          "no_media": {
+            "type": "boolean",
+            "title": "No Media",
+            "default": false
+          },
+          "media_released": {
+            "type": "boolean",
+            "title": "Media Released",
+            "default": false
+          },
+          "camera_specs_name": {
+            "type": "string",
+            "title": "Camera Specs Name",
+            "default": ""
+          },
+          "backend_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RobotBackendStatus"
+              },
+              {
+                "$ref": "#/components/schemas/MujocoBackendStatus"
+              },
+              {
+                "$ref": "#/components/schemas/MockupSimBackendStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backend Status"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "wlan_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wlan Ip"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "hardware_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hardware Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "robot_name",
+          "state",
+          "wireless_version",
+          "desktop_app_daemon",
+          "simulation_enabled",
+          "mockup_sim_enabled",
+          "backend_status"
+        ],
+        "title": "DaemonStatus",
+        "description": "Status of the Reachy Mini daemon."
+      },
+      "MotorStatus": {
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/MotorControlMode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode"
+        ],
+        "title": "MotorStatus",
+        "description": "Represents the status of the motors.\n\nExposes\n- mode: The current motor control mode (enabled, disabled, gravity_compensation)."
+      },
+      "MoveUUID": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid"
+        ],
+        "title": "MoveUUID",
+        "description": "Model representing a unique identifier for a move task."
+      },
+      "GotoModelRequest": {
+        "properties": {
+          "head_pose": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/XYZRPYPose"
+              },
+              {
+                "$ref": "#/components/schemas/Matrix4x4Pose"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Head Pose"
+          },
+          "antennas": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Antennas"
+          },
+          "body_yaw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Yaw"
+          },
+          "duration": {
+            "type": "number",
+            "title": "Duration"
+          },
+          "interpolation": {
+            "$ref": "#/components/schemas/InterpolationTechnique",
+            "default": "minjerk"
+          }
+        },
+        "type": "object",
+        "required": [
+          "duration"
+        ],
+        "title": "GotoModelRequest",
+        "description": "Request model for the goto endpoint.",
+        "examples": [
+          {
+            "antennas": [
+              0.0,
+              0.0
+            ],
+            "body_yaw": 0.0,
+            "duration": 2.0,
+            "head_pose": {
+              "pitch": 0.0,
+              "roll": 0.0,
+              "x": 0.0,
+              "y": 0.0,
+              "yaw": 0.0,
+              "z": 0.0
+            },
+            "interpolation": "minjerk"
+          },
+          {
+            "antennas": [
+              0.0,
+              0.0
+            ],
+            "duration": 1.0,
+            "interpolation": "linear"
+          }
+        ]
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "FullBodyTarget": {
+        "properties": {
+          "target_head_pose": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/XYZRPYPose"
+              },
+              {
+                "$ref": "#/components/schemas/Matrix4x4Pose"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Head Pose"
+          },
+          "target_antennas": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Antennas"
+          },
+          "target_body_yaw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Body Yaw"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "title": "FullBodyTarget",
+        "description": "Represent the full body including the head pose and the joints for antennas.",
+        "examples": [
+          {
+            "target_antennas": [
+              0.0,
+              0.0
+            ],
+            "target_body_yaw": 0.0,
+            "target_head_pose": {
+              "pitch": 0.0,
+              "roll": 0.0,
+              "x": 0.0,
+              "y": 0.0,
+              "yaw": 0.0,
+              "z": 0.0
+            }
+          }
+        ]
+      },
+      "XYZRPYPose": {
+        "properties": {
+          "x": {
+            "type": "number",
+            "title": "X",
+            "default": 0.0
+          },
+          "y": {
+            "type": "number",
+            "title": "Y",
+            "default": 0.0
+          },
+          "z": {
+            "type": "number",
+            "title": "Z",
+            "default": 0.0
+          },
+          "roll": {
+            "type": "number",
+            "title": "Roll",
+            "default": 0.0
+          },
+          "pitch": {
+            "type": "number",
+            "title": "Pitch",
+            "default": 0.0
+          },
+          "yaw": {
+            "type": "number",
+            "title": "Yaw",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "title": "XYZRPYPose",
+        "description": "Represent a 3D pose using position (x, y, z) in meters and orientation (roll, pitch, yaw) angles in radians."
+      },
+      "Matrix4x4Pose": {
+        "properties": {
+          "m": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 16,
+            "minItems": 16,
+            "title": "M"
+          }
+        },
+        "type": "object",
+        "required": [
+          "m"
+        ],
+        "title": "Matrix4x4Pose",
+        "description": "Represent a 3D pose by its 4x4 transformation matrix (translation is expressed in meters)."
+      },
+      "DoAInfo": {
+        "properties": {
+          "angle": {
+            "type": "number",
+            "title": "Angle"
+          },
+          "speech_detected": {
+            "type": "boolean",
+            "title": "Speech Detected"
+          }
+        },
+        "type": "object",
+        "required": [
+          "angle",
+          "speech_detected"
+        ],
+        "title": "DoAInfo",
+        "description": "Direction of Arrival info from the microphone array."
+      },
+      "FullState": {
+        "properties": {
+          "control_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MotorControlMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "head_pose": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/XYZRPYPose"
+              },
+              {
+                "$ref": "#/components/schemas/Matrix4x4Pose"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Head Pose"
+          },
+          "head_joints": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Head Joints"
+          },
+          "body_yaw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Yaw"
+          },
+          "antennas_position": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Antennas Position"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          },
+          "passive_joints": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passive Joints"
+          },
+          "doa": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DoAInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "FullState",
+        "description": "Represent the full state of the robot including all joint positions and poses."
+      },
+      "DaemonState": {
+        "type": "string",
+        "enum": [
+          "not_initialized",
+          "starting",
+          "running",
+          "stopping",
+          "stopped",
+          "error"
+        ],
+        "title": "DaemonState",
+        "description": "Enum representing the state of the Reachy Mini daemon."
+      },
+      "RobotBackendStatus": {
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "motor_control_mode": {
+            "$ref": "#/components/schemas/MotorControlMode"
+          },
+          "last_alive": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Alive"
+          },
+          "control_loop_stats": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Control Loop Stats"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ready",
+          "motor_control_mode",
+          "last_alive",
+          "control_loop_stats"
+        ],
+        "title": "RobotBackendStatus",
+        "description": "Status of the Robot Backend."
+      },
+      "MujocoBackendStatus": {
+        "properties": {
+          "motor_control_mode": {
+            "$ref": "#/components/schemas/MotorControlMode"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "motor_control_mode"
+        ],
+        "title": "MujocoBackendStatus",
+        "description": "Status of the Mujoco backend."
+      },
+      "MockupSimBackendStatus": {
+        "properties": {
+          "motor_control_mode": {
+            "$ref": "#/components/schemas/MotorControlMode"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "motor_control_mode"
+        ],
+        "title": "MockupSimBackendStatus",
+        "description": "Status of the MockupSim backend."
+      },
+      "MotorControlMode": {
+        "type": "string",
+        "enum": [
+          "enabled",
+          "disabled",
+          "gravity_compensation"
+        ],
+        "title": "MotorControlMode",
+        "description": "Enum for motor control modes."
+      },
+      "InterpolationTechnique": {
+        "type": "string",
+        "enum": [
+          "linear",
+          "minjerk",
+          "ease_in_out",
+          "cartoon"
+        ],
+        "title": "InterpolationTechnique",
+        "description": "Enumeration of interpolation techniques."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

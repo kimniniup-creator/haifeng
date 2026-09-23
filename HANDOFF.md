@@ -104,3 +104,5 @@ Luma没有现场发现；上游有E06-0055真机验证记录，本机未复验�
 - 不要把 Codex AppData 副本的 SDK 1.11.0 当成原生版本；当前原生状态返回 1.8.0。ready=false 与 last_alive=null 在其 get_status 中未刷新，不能单凭这两字段断言掉线。
 - 后续安装使用原子替换和显式原生 site；测试不等于实体动作验收。
 - 后续 UI 验收已完成：官方主界面 Ready 和摄像头画面恢复，系统提示已消失；崩溃修复闭环。动作模式及旧 conversation-app 重复进程清理另行处理，不以本次启动恢复宣称动作完整可用。
+
+- 另一台主机做映射从docs/reachy-mapping/README.md进入；actions.json含全部85情绪和舞蹈/音乐，不依赖.runtime。网络与实体执行未验收，另一台主机需自己设置BASE_URL和刷新可用列表。

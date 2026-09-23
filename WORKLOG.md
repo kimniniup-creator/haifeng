@@ -110,3 +110,7 @@
 - Agent owner回传Kim截图DANCES(34)。原85+19目录仅REST recorded dataset，不能称全机器人动作目录。已在目录顶部纠正并交动作owner核对34入口/ID/调用路径；尚未确认该界面是否使用Conversation App AVAILABLE_MOVES。
 
 - 34入口核对已完成并由总控复查源码/两库GET：20官方+14音乐，33项已枚举，headbanger_combo缺失；统一REST recorded路径。完整对照整合进REACHY_ACTION_CATALOG.md，未播放动作。
+
+## 跨主机动作与表情接口交付
+- 用户要求全部同步GitHub用于另一台主机映射，明确表情也要推。新增docs/reachy-mapping，包含121行机器可读目录（85情绪+35已枚举舞蹈/音乐+1缺项）、当前动作/状态OpenAPI子集、WS事件与停止契约、跨主机连接边界。
+- 校验唯一键、85情绪、34界面舞蹈、120 listed和schema递归引用通过。未推密钥/IP/原始日志/媒体；未发送动作或修改网络。
