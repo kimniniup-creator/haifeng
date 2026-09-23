@@ -2,6 +2,8 @@
 
 This package produces backend v1 `presence`, `wave`, and `palm_stop` events. It owns no robot action, TTS, audio, dialogue epoch, daemon, or identity database. `presence` means a visible **hand**, not whole-body presence, face identity, or emotion. An obscured hand is not evidence that a person left the room.
 
+The product-facing name is **hand_presence / 手部可见性**. The wire `kind='presence'` is retained for the agreed backend v1 contract with `payload.basis='hand'`. A false observation means no accepted visible hand; never label it “person left”.
+
 ## Install and run
 
 Use an isolated Python 3.12 environment; do not install into the native Reachy or speech environment. Commands run from this repository root:
@@ -62,6 +64,8 @@ The verified working alternative on this Windows host uses **DirectShow without 
 & .runtime/vision-venv/Scripts/python.exe tools/run_pet_vision_camera.py --owner-approved --seconds 10
 & .runtime/vision-venv/Scripts/python.exe tools/run_pet_vision.py --provider pet_vision.ipc:leased_opencv_frames
 ```
+
+For a coordinator-confirmed human acceptance window, add `--seconds 60`. Do not add `--send` during recognition-only acceptance. Stdout contains only event metadata and may be redirected to an ignored `.runtime/*.ndjson` file; camera pixels never enter that stream. The normal provider default is 15 seconds. Wait for the media owner and human participant to be ready before opening the device.
 
 It enumerates video names through DirectShow without opening them, requires exactly one `Reachy Mini Camera`, and opens only that mapped DirectShow index. It does not probe other camera indexes. pygrabber/comtypes are isolated Windows-only dependencies. Each run is bounded; no persistent service is started. `--send` is intentionally omitted above so physical recognition validation does not trigger robot actions.
 
