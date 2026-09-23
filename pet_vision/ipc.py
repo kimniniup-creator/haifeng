@@ -6,6 +6,7 @@ import struct
 import subprocess
 import threading
 import sys
+from .camera_guard import StallGuard
 from .pipeline import Frame
 
 
@@ -31,9 +32,11 @@ def _read_exact(stream,n):
     return data
 
 
-def frames(*, direct=False, opencv=False, seconds=15):
+def frames(*, direct=False, opencv=False, seconds=15, continuous=False):
     if not 0 < seconds <= 60:
         raise ValueError('Camera window must be in (0,60] seconds')
+    if continuous and not opencv:
+        raise ValueError('Continuous capture is only supported by the guarded DirectShow provider')
     import numpy as np
     python=sys.executable if opencv else os.environ.get('PET_VISION_IPC_PYTHON')
     if not python or not Path(python).is_file():
@@ -43,6 +46,8 @@ def frames(*, direct=False, opencv=False, seconds=15):
     command=[python,str(script),'--pipe','--seconds',str(seconds)]
     if opencv:
         command.append('--owner-approved')
+        if continuous:
+            command.append('--continuous')
     elif direct:
         command.append('--direct-camera-owner-approved')
         name=os.environ.get('PET_VISION_DEVICE_NAME')
@@ -51,9 +56,13 @@ def frames(*, direct=False, opencv=False, seconds=15):
     process=subprocess.Popen(command,
                              stdout=subprocess.PIPE,creationflags=flags)
     # Outer deadline also covers native imports and lost IPC sources.
-    watchdog=threading.Timer(seconds+30,lambda:_stop_owned_process(process))
-    watchdog.daemon=True
-    watchdog.start()
+    watchdog=None
+    stall=StallGuard(30,lambda:_stop_owned_process(process))
+    stall.start()
+    if not continuous:
+        watchdog=threading.Timer(seconds+30,lambda:_stop_owned_process(process))
+        watchdog.daemon=True
+        watchdog.start()
     try:
         while True:
             prefix=process.stdout.read(4)
@@ -69,11 +78,14 @@ def frames(*, direct=False, opencv=False, seconds=15):
             if c!=3 or not (0<h<=2160 and 0<w<=3840) or header['size']!=h*w*c:
                 raise RuntimeError('Invalid frame shape')
             raw=_read_exact(process.stdout,header['size'])
+            stall.touch()
             yield Frame(np.frombuffer(raw,dtype=np.uint8).reshape((h,w,c)),header['observed_at'])
         if process.wait(timeout=5)!=0:
             raise RuntimeError('Native IPC reader failed')
     finally:
-        watchdog.cancel()
+        stall.stop()
+        if watchdog:
+            watchdog.cancel()
         if process.poll() is None:
             _stop_owned_process(process)
             process.wait(timeout=5)
@@ -85,6 +97,6 @@ def leased_video_frames(*, seconds=15):
     yield from frames(direct=True,seconds=seconds)
 
 
-def leased_opencv_frames(*, seconds=15):
+def leased_opencv_frames(*, seconds=15, continuous=False):
     """Windows DirectShow alternative; requires exclusive Reachy video lease."""
-    yield from frames(opencv=True,seconds=seconds)
+    yield from frames(opencv=True,seconds=seconds,continuous=continuous)

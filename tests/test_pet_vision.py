@@ -176,3 +176,45 @@ def test_async_sink_is_rejected_instead_of_silently_lost():
     async def async_sink(event): pass
     with pytest.raises(TypeError,match='synchronous'):
         Pipeline(None,GestureEngine(),async_sink)
+
+
+def test_stall_guard_progress_and_expiry():
+    from pet_vision.camera_guard import StallGuard
+    now=[0.]
+    guard=StallGuard(20,lambda:None,lambda:now[0])
+    now[0]=19
+    assert not guard.expired()
+    guard.touch()
+    now[0]=38
+    assert not guard.expired()
+    now[0]=40
+    assert guard.expired()
+
+
+def test_windows_camera_singleton_rejects_duplicate_then_releases():
+    import os
+    from uuid import uuid4
+    from pet_vision.camera_guard import CameraLease
+    if os.name!='nt': pytest.skip('Windows named mutex')
+    name='Local\\PetVisionTest-'+str(uuid4())
+    first,second=CameraLease(name),CameraLease(name)
+    try:
+        first.acquire()
+        with pytest.raises(RuntimeError,match='Another'):
+            second.acquire()
+        first.close()
+        second.acquire()
+    finally:
+        first.close()
+        second.close()
+
+
+@pytest.mark.parametrize('args',[
+    ['--demo','--continuous'],
+    ['--provider','pet_vision.ipc:frames','--continuous'],
+    ['--provider','pet_vision.ipc:leased_opencv_frames','--continuous','--seconds','60'],
+])
+def test_continuous_cli_rejects_unsafe_combinations_without_camera(args):
+    import subprocess,sys
+    result=subprocess.run([sys.executable,'tools/run_pet_vision.py',*args],capture_output=True,text=True,timeout=10)
+    assert result.returncode==2 and '--continuous requires' in result.stderr

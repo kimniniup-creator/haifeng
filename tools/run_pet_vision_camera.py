@@ -12,6 +12,9 @@ import sys
 import threading
 import time
 from urllib.request import urlopen
+from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from pet_vision.camera_guard import CameraLease, StallGuard
 
 
 def check_owner():
@@ -30,6 +33,7 @@ def main():
     parser.add_argument('--device-name',default='Reachy Mini Camera')
     parser.add_argument('--seconds',type=float,default=10.)
     parser.add_argument('--pipe',action='store_true')
+    parser.add_argument('--continuous',action='store_true',help='explicit persistent video lease; exits on errors or 20s without reader progress')
     args=parser.parse_args()
     if not args.owner_approved or not 0<args.seconds<=60 or 'reachy' not in args.device_name.lower():
         parser.error('Explicit owner approval, Reachy name and 0<seconds<=60 required')
@@ -37,9 +41,15 @@ def main():
     def timeout():
         print('DirectShow reader hard deadline; exiting own process',file=sys.stderr,flush=True)
         os._exit(124)
-    watchdog=threading.Timer(args.seconds+15,timeout)
-    watchdog.daemon=True
-    watchdog.start()
+    lease=CameraLease()
+    lease.acquire()
+    stall=StallGuard(20,timeout)
+    stall.start()
+    watchdog=None
+    if not args.continuous:
+        watchdog=threading.Timer(args.seconds+15,timeout)
+        watchdog.daemon=True
+        watchdog.start()
     import cv2
     from pygrabber.dshow_graph import FilterGraph
     graph=FilterGraph()
@@ -64,14 +74,16 @@ def main():
         print(json.dumps({'backend':cap.getBackendName(),'width':cap.get(cv2.CAP_PROP_FRAME_WIDTH),
                           'height':cap.get(cv2.CAP_PROP_FRAME_HEIGHT),'reported_fps':cap.get(cv2.CAP_PROP_FPS)}),file=sys.stderr,flush=True)
         capture_start=time.monotonic()
+        stall.touch()
         last_check=0.
-        while time.monotonic()-capture_start<args.seconds:
+        while args.continuous or time.monotonic()-capture_start<args.seconds:
             if time.monotonic()-last_check>1:
                 check_owner()
                 last_check=time.monotonic()
             # Conservative read-start time; never give a slow read a fresh timestamp.
             captured=time.time()
             ok,frame=cap.read()
+            stall.touch()
             if not ok:
                 raise RuntimeError('Reachy video read failed; no auto-reconnect')
             if time.time()-captured>.75:
@@ -92,7 +104,10 @@ def main():
                 sys.stdout.buffer.flush()
     finally:
         cap.release()
-        watchdog.cancel()
+        stall.stop()
+        if watchdog:
+            watchdog.cancel()
+        lease.close()
     print(json.dumps(dict(frames=count,duplicates=duplicates,stale=stale,shape=shape,
                           elapsed=round(time.monotonic()-start,3),capture_seconds=round(time.monotonic()-capture_start,3),
                           timestamp_basis='read_start_no_sensor_pts')),
