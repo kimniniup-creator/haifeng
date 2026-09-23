@@ -18,15 +18,18 @@ from pet_vision.synthetic import demo_observations
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--demo", action="store_true")
+    parser.add_argument('--mode',choices=('hands','face'),default='hands',help='one detector on the existing unique camera provider')
     parser.add_argument("--provider", help="module:function yielding timestamped frames")
     parser.add_argument("--seconds", type=float, help="bounded camera window, 0<seconds<=60; built-in IPC providers only")
     parser.add_argument('--continuous',action='store_true',help='persistent leased DirectShow provider only; exits on delivery/camera errors')
     parser.add_argument('--event-log',help='local metadata NDJSON log, rotated at 1 MiB with one backup; replaces stdout events')
-    parser.add_argument("--model", default=".runtime/models/hand_landmarker.task")
+    parser.add_argument("--model", help='local task model matching selected mode')
     parser.add_argument("--send", action="store_true", help="deliver metadata to local backend (requires PET_VISION_TOKEN)")
     args = parser.parse_args()
     if bool(args.demo) == bool(args.provider):
         parser.error("choose exactly one of --demo or --provider")
+    if args.demo and args.mode!='hands':
+        parser.error('Face mode uses real/injected frames; offline face fixtures are in tests/test_pet_vision_face.py')
     if args.seconds is not None and (not 0 < args.seconds <= 60 or not args.provider or
                                     args.provider not in ('pet_vision.ipc:frames','pet_vision.ipc:leased_video_frames','pet_vision.ipc:leased_opencv_frames')):
         parser.error('--seconds requires a built-in camera provider and 0<seconds<=60')
@@ -53,7 +56,11 @@ def main():
                  ('status','reason','decision_id') if k in receipt}})
     else:
         sink = emit
-    engine = GestureEngine()
+    if args.mode=='face':
+        from pet_vision.face_cues import FaceCueEngine
+        engine=FaceCueEngine()
+    else:
+        engine = GestureEngine()
     if args.demo:
         for obs in demo_observations(time.time()):
             # Keep acquisition timestamps real when using backend TTL validation.
@@ -61,10 +68,15 @@ def main():
             for event in engine.update(obs, now=time.time()):
                 sink(event)
         return
-    from pet_vision.detector import MediaPipeDetector
+    if args.mode=='face':
+        from pet_vision.face_detector import MediaPipeFaceDetector as SelectedDetector
+        default_model='.runtime/models/face_landmarker.task'
+    else:
+        from pet_vision.detector import MediaPipeDetector as SelectedDetector
+        default_model='.runtime/models/hand_landmarker.task'
     module, name = args.provider.split(":", 1)
     provider = getattr(importlib.import_module(module), name)
-    detector = MediaPipeDetector(args.model)
+    detector = SelectedDetector(args.model or default_model)
     stream = provider(continuous=True) if args.continuous else provider(seconds=args.seconds) if args.seconds is not None else provider()
     try:
         pipeline = Pipeline(detector, engine, sink)
