@@ -29,3 +29,11 @@ Luma没有现场发现；上游有E06-0055真机验证记录，本机未复验�
 
 ## 运行日志
 .runtime/bridge.stdout.log、bridge.stderr.log、daemon.stdout.log、daemon.stderr.log。PID文件记录启动器进程，Windows虚拟环境可能再派生真实Python进程，停止前需核对监听PID、父子关系和命令行，不能按python名称批量杀进程。
+
+## 2026-09-23 官方接口专项覆盖结果（替代上文过时音频状态）
+- 以 docs/REACHY_INTERFACE_MATRIX.md 为本轮验收权威记录。此前MME和官方play_sound用户均反馈无声，扬声器未修复；本轮分声道测试等待用户实际听感，EOS不是通过。
+- USB音频板控制现在可读，版本2.1.2；无DSP/固件写入。麦克风短时非零采样通过，语音质量未验。
+- 触角3°目标实际偏移仅约0.35°，完成事件不等于到位；停止/取消事件通过；末态disabled、初始触角目标恢复。不要扩大运动。
+- 摄像头近灰首帧及MJPEG超时，YUY2诊断原生阻塞；专用探测进程已停止，脚本添加硬期限。不要声称相机可用。
+- daemon与SDK任务生命周期有真实响应；媒体REST在no_media时可能200空操作。不要把play_sound/test-sound的200当播放。
+- 正式工具在tools/reachy_*_probe.py及reachy_api_audit.py；仅唯一硬件操作方顺序运行。原始日志仅.runtime。当前只允许可逆检查，禁止校准/固件/重置/随机驱动。
