@@ -116,3 +116,7 @@ LOOK_UP.md is the cross-owner and second-host interface handoff.
 ## 2026-09-24 read-only window after native restart
 - New diagnostics available; 5 GET-only samples show current max joint tracking error 10.058 degrees, pose error about 8.645 degrees/8.518 mm, despite reported enabled/error-null and zero speech offsets. Existing preflight rejects this state.
 - Sent evidence to maintenance owner and coordinator. Kim away: no motion, torque changes, SDK writes or automatic corrections. Physical cause remains unproven; DIAGNOSIS.md records scope and evidence.
+
+## Bounded independent diagnosis delivered
+- Current logs, three paired GET samples, and native source narrow the issue without claiming a hardware root cause. Loop and feedback are active; ik_required remains true by design; neutral target follows logged desktop wake-up. Cached enabled/error-null is not verified motor readback.
+- Four offline AST/fake-controller checks pass. Added reproducible source-only checker; documented candidate falsification and minimal cached-field then motor-readback experiment in DIAGNOSIS.md. No device writes or native modifications.
