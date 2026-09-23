@@ -150,3 +150,19 @@ Interpretation after reviewed installation: false internal torque skips position
 
 ### Static cached-field access correction
 Independent QA showed generic getattr can execute properties even when the current native attributes are plain values. The four new cached fields now use inspect.getattr_static and accept only exact built-in bool/int/float types; descriptors, dynamic getters, unsupported objects, nonfinite timestamps and missing values return null. No arbitrary tolist conversion is used for these scalars. Existing pose/array field serialization is unchanged for compatibility and remains scoped to the audited native backend attributes; this change does not claim a descriptor-free contract for all legacy fields. Four forbidden-property reproductions plus dynamic-getter/conversion/type checks cover the new contract. No deployment performed.
+
+## SDK 1.8 ready export: independently reproduced, candidate only
+Fresh GET still reports backend_status.ready=false and last_alive=null while loop statistics advance. Native `robot/backend.py` initializes `_status` with these values (lines 100–101), updates `self.last_alive` and `self.ready.set()` after successful loop work (263–265), but `get_status` (320 onward) only copies error and control mode. No assignment copies the event/timestamp into the exported status. This source defect is independently reproduced with a real local threading.Event and fake backend status; it does not require a live backend or SDK import.
+
+Minimal candidate for maintenance-owner review, inside the native `get_status` before returning `_status`:
+
+```python
+self._status.ready = self.ready.is_set()
+self._status.last_alive = self.last_alive
+```
+
+The existing error and motor-control-mode assignments remain unchanged. This reads the already-existing threading.Event (source verified in abstract.py:133) and scalar, not a motor getter. It must not be added to the pure cached telemetry helper as an arbitrary method call. The candidate is exercised only as an in-memory AST transform; no native file is changed. Seven total offline source checks pass, including original stale export, candidate event-set export, and event-clear/unknown timestamp preservation. Source hashes remain those recorded above.
+
+Readiness means the loop has reached a successful update at least once; the Event may remain set after later failure. Consumers must continue to require running/error-free state, fresh last_alive, current diagnostic consistency, no competing move, and measured target tracking. Do not replace ready with a constant, infer it from a port/HTTP 200, or treat this candidate as solving the roughly 10-degree tracking error. The 8765 photo/classification pipeline may report a prepared activity intent while physical dispatch remains blocked. Existing camera/smile-to-sound acceptance remains independent.
+
+Next falsification: maintenance owner reviews/applies this narrowly scoped export fix only within its approved lifecycle plan, then reads status alongside diagnostic last_alive; compare genuine unset/error/stale cases and keep the physical tracking rejection. If correct ready export still accompanies large joint error, inspect the cached dispatch gates already prepared in 7f1de63, then motor-side readback in an observable authorized window. No live ready bypass, control-loop restart, torque operation or photo-to-hardware dispatch was performed here.

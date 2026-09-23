@@ -27,4 +27,20 @@ def stub(torque,mode):
 a=stub(True,3);u(a);a.c.set_stewart_platform_position.assert_called_once_with([1.,2.,3.,4.,5.,6.]);a.c.set_body_rotation.assert_called_once_with(0.)
 b=stub(False,3);u(b);b.c.set_stewart_platform_position.assert_not_called()
 c=stub(True,0);u(c);c.c.set_stewart_platform_position.assert_not_called()
-print(json.dumps({'checks_passed':4,'abstract_sha256':h,'robot_backend_sha256':rh,'checks':['successful IK retains true flag and updates targets','position loop passes target to fake controller','disabled internal torque skips position dispatch','current mode skips position dispatch'],'hardware_imports':False}))
+get_status,_=extract(root/'robot/backend.py','get_status')
+import threading
+ready=threading.Event();ready.set()
+status=SimpleNamespace(ready=False,last_alive=None)
+live=SimpleNamespace(_status=status,ready=ready,last_alive=1234.5,error=None,motor_control_mode='enabled')
+assert get_status(live).ready is False and status.last_alive is None
+# Candidate export correction in memory only; never write the native file.
+tree=ast.parse((root/'robot/backend.py').read_bytes())
+method=next(n for n in ast.walk(tree) if isinstance(n,ast.FunctionDef) and n.name=='get_status')
+method.returns=None;method.decorator_list=[]
+for arg in method.args.args:arg.annotation=None
+method.body[1:1]=ast.parse('self._status.ready = self.ready.is_set()\nself._status.last_alive = self.last_alive').body
+env={};exec(compile(ast.fix_missing_locations(ast.Module(body=[method],type_ignores=[])),'candidate-export','exec'),env)
+assert env['get_status'](live).ready is True and status.last_alive==1234.5
+ready.clear();live.last_alive=None
+assert env['get_status'](live).ready is False and status.last_alive is None
+print(json.dumps({'checks_passed':7,'abstract_sha256':h,'robot_backend_sha256':rh,'checks':['successful IK retains true flag and updates targets','position loop passes target to fake controller','disabled internal torque skips position dispatch','current mode skips position dispatch','original status export stays stale despite set Event','candidate exports actual set Event and timestamp','candidate preserves unset/unknown state'],'hardware_imports':False}))

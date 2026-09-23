@@ -128,3 +128,7 @@ LOOK_UP.md is the cross-owner and second-host interface handoff.
 ## Cached-field independent QA correction
 - Fixed four reproduced implicit-property calls with static lookup and strict scalar type acceptance; unknown/descriptor values return null. Added independent reproductions and hostile dynamic-getter/conversion tests.
 - Visual smile-to-sound flow takes priority independently of unverified motion. No new action mapping, camera/audio access, or native deployment.
+
+## Shared photo/activity dependency: ready export candidate
+- Reproduced native1.8 status export staying false/null despite local Event set/live timestamp. Added in-memory candidate checks for exact two-line export correction; seven offline source checks pass, no SDK import or native mutation.
+- Tracking mismatch remains independently blocking. Deliver candidate to maintenance owner for review, not deployment here; camera-to-sound mainline remains independent.
