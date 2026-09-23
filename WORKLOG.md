@@ -124,3 +124,7 @@
 - 固定ba1dd0e，指标测试1pass；256条已有元数据独立聚合匹配报告，unknown113保留分母。
 - 未下载原图或重跑推理；发现原运行JSON缺最终脚本新增detector_source_sha256，明确记录证据边界并通知视觉owner。
 - 详见docs/GENKI_EVALUATION_QA.md；PR11不等待此文档。
+
+## 2026-09-24 尺度分析独立QA
+- 固定PR13 b35a493，指标测试1pass；逐条比对两run旧字段及独立重算尺度统计一致。源码hash差异确认仅CRLF/LF。
+- 仅3文件分析/metadata改动，无运行时变化；640→960为未执行提案。证据docs/FACE_SCALE_QA.md，未运行模型或设备。
