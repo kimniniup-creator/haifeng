@@ -1,7 +1,32 @@
 # 笑脸声音闭环：唯一维护计划与当前边界
 
-本计划由链路维护 owner 执行，当前只整理候选，**没有部署或重启**。
+本计划由链路维护 owner 执行。2026-09-24 03:08声音/后端匹配部署已完成，
+视觉启动仍未执行；本节运行记录取代此前“全部仅离线候选”的状态。
 先做笑脸声音，不以电机跟踪误差修复作为声音验收前提。
+
+## 当前运行检查（2026-09-24 03:08 +08:00）
+
+声音与后端均来自main `f08f11e1417820d363f21a1737fd01099164bc06`。
+旧后端通过已有operator shutdown正常退出；唯一声音owner替换已确认的旧声音
+树，新声音在lifespan之前即保持原来的muted=true，随后启动匹配后端。
+
+- 7860唯一listener38800（launcher46204），listening/error=null/muted=true；
+  capture_age=16ms、capture_frames=2609、dropped_frames=0。
+- 8091唯一listener45516，正式 `.runtime/pet-env`；voice_connected=true、
+  proactive_connected=true、两link_error=null，跨越2秒复查仍保持连接。
+  该进程到7860有两条Established连接，对应普通事件订阅与认证主动声音租约。
+- 声音session为 `a3b66bf8-cc1e-43c7-8a5c-f4d867af0c10`，语义订阅已连接。
+  声音入口从main导入，源码SHA256为
+  `cf23cf7874486406d6896c75fadd249aec5a3c3c323cc0cf66a27b0d323e462c`。
+- `HAIFENG_PROACTIVE_TOKEN` 从ignored `.runtime/proactive-audio-token.json`
+  读取到两进程环境，未打印、未写命令参数。过滤后的本地快照位于ignored
+  `.runtime/smile-service-deployment.json`，不含转写、原始音频或凭据。
+- vision producer数量0；未重试被拒启动，没有发送视觉/试听测试事件。
+  没有EnableMotion，未动原生daemon或扭矩。旧8088仍未更替。
+
+这些检查证明匹配协议已在线及租约维持，不证明现场camera→smile→扬声器。
+静音是维护前已有状态，已保留；现场可听环节需用户通过原声音界面正常解除
+静音，再使用下述单次正常视觉入口。PID只适用于此快照，后续操作前重新核对。
 
 ## 已固定的软件组合
 
@@ -43,7 +68,8 @@
 
 这段只供之后的正常人工维护窗口使用，**本轮没有执行**，也不是绕过先前
 自动审批拒绝的备用启动器。先由维护owner完成上述声音/后端的匹配部署，
-准备共享proactive凭据并核对官方media已释放。用户不用反复开关机器人。
+准备共享proactive凭据并核对官方media已释放。声音/后端部署现已完成；现场
+需要发声时通过原声音界面解除静音一次。用户不用反复开关机器人。
 若前置检查失败，先处理提示的维护缺项，不反复启动相机。
 
 在 PowerShell 一次粘贴以下原有runner入口；不创建新服务或自动重连：
@@ -52,6 +78,8 @@
 Set-Location -LiteralPath 'D:\海风'
 $ErrorActionPreference = 'Stop'
 $smileTokens = Get-Content -LiteralPath '.runtime/pet-local-tokens.json' -Raw | ConvertFrom-Json
+$smileVoiceState = Invoke-RestMethod 'http://127.0.0.1:7860/api/state' -TimeoutSec 3
+if ($smileVoiceState.muted -ne $false) { throw '声音当前静音；在准备现场发声验收时，通过原声音界面解除静音。' }
 $smileState = Invoke-RestMethod 'http://127.0.0.1:8091/v1/state' -Headers @{ Authorization = "Bearer $($smileTokens.operator)" } -TimeoutSec 3
 if ($smileState.proactive_connected -ne $true -or $smileState.voice_connected -ne $true -or $smileState.stopped -or $smileState.closed) {
     throw '声音/后端的主动回应连接尚未就绪；先由维护owner处理，不启动相机。'
@@ -80,7 +108,8 @@ visual_unknown得到后端回执；用户稳定笑一次、保持笑、回中性
 上述ignored路径，3758596字节/hash匹配；正式环境实际构造、空白图推理和close
 成功，blank faces=0/quality=false，没有打开camera。默认pet-env原先缺失，已按
 requirements-pet.txt准备并做仅import检查，未启动后端。现有旧声音/后端服务
-仍未换版；唯一已发生的执行拒绝仍是视觉producer启动。更高分辨率研究不是前置。
+随后已完成上述匹配换版；唯一已发生的执行拒绝仍是视觉producer启动。
+更高分辨率研究不是前置。
 
 ## 与声音链并行、但尚未部署的动作维护候选
 
