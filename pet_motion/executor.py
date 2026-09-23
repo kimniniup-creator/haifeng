@@ -19,6 +19,7 @@ class MotionResult:
     reason: str = ""
     uuid: str | None = None
     semantic_id: str = ""
+    baseline_id: str | None = None
 
 
 class MotionExecutor:
@@ -28,7 +29,7 @@ class MotionExecutor:
     reconnect, retries, automatic motor enable, or sleep commands are used.
     """
     def __init__(self, transport=None, *, dry_run=True, capacity=4,
-                 mapping_path=None, micro_profile_path=None, history_limit=256, execution_timeout=20.0,
+                 mapping_path=None, micro_profile_path=None, posture_profile_path=None, history_limit=256, execution_timeout=20.0,
                  stop_timeout=4.0):
         if capacity < 1 or history_limit < capacity + 1:
             raise ValueError("capacity/history_limit too small")
@@ -43,6 +44,10 @@ class MotionExecutor:
         self.micro_profiles = json.loads(Path(micro_profile_path or Path(__file__).with_name("micro_profiles.json")).read_text(encoding="utf-8"))["profiles"]
         for profile in self.micro_profiles.values():
             validate_profile(profile)
+        from .posture import validate_posture_profile
+        self.posture_profiles = json.loads(Path(posture_profile_path or Path(__file__).with_name("posture_profiles.json")).read_text(encoding="utf-8"))["profiles"]
+        for profile in self.posture_profiles.values():
+            validate_posture_profile(profile)
         for mapping in self.mappings.values():
             if "micro_profile" in mapping and mapping["micro_profile"] not in self.micro_profiles:
                 raise ValueError("unknown micro profile")
@@ -60,6 +65,8 @@ class MotionExecutor:
         self._control = asyncio.Lock()
         self._stopping = self._closed = False
         self._fault = ""
+        self._baseline = None
+        self._posture_seed = None
 
     @property
     def available(self):
@@ -94,11 +101,12 @@ class MotionExecutor:
 
     def _drain(self, reason):
         while self._queue:
-            result, _, _, _ = self._queue.popleft()
+            result, _, _, _, _ = self._queue.popleft()
             self._save(replace(result, status="cancelled", reason=reason))
 
     def _trip(self, reason):
         self._fault = reason
+        self._baseline = None
         self._drain(reason)
 
     async def set_turn(self, turn_id):
@@ -110,7 +118,7 @@ class MotionExecutor:
                 await self._cancel("turn_changed")
 
     async def submit(self, semantic, turn_id, ttl_seconds, request_id=None, *,
-                     start_deadline=None, execution_budget_seconds=None):
+                     start_deadline=None, execution_budget_seconds=None, baseline_id=None):
         request_id = request_id or str(uuid4())
         if not isinstance(request_id, str):
             raise ValueError("request_id must be a string")
@@ -142,7 +150,9 @@ class MotionExecutor:
         mapping = self.mappings.get(semantic)
         if mapping is None:
             return self._save(replace(result, reason="unknown_semantic"))
-        if mapping.get("action_id") is None and "micro_profile" not in mapping:
+        if semantic == "return_to_start" and (self._baseline is None or baseline_id != self._baseline.id or self._baseline.expires <= time.monotonic()):
+            return self._save(replace(result, reason="baseline_missing_or_invalid"))
+        if mapping.get("action_id") is None and "micro_profile" not in mapping and "posture_profile" not in mapping:
             return self._save(replace(result, status="noop", reason="no_physical_motion"))
         if self.dry_run:
             return self._save(replace(result, status="dry_run", reason="candidate_not_executed"))
@@ -150,12 +160,14 @@ class MotionExecutor:
             return self._save(replace(result, reason="mapping_not_approved"))
         if "micro_profile" in mapping and self.micro_profiles[mapping["micro_profile"]].get("approved") is not True:
             return self._save(replace(result, reason="micro_profile_not_approved"))
+        if "posture_profile" in mapping and self.posture_profiles[mapping["posture_profile"]].get("approved") is not True:
+            return self._save(replace(result, reason="posture_profile_not_approved"))
         if len(self._queue) >= self.capacity:
             return self._save(replace(result, reason="queue_full"))
         result = replace(result, status="queued")
         self._futures[request_id] = asyncio.get_running_loop().create_future()
         self._save(result, terminal=False)
-        self._queue.append((result, turn_id, admission_deadline, execution_budget_seconds))
+        self._queue.append((result, turn_id, admission_deadline, execution_budget_seconds, baseline_id))
         self._wake.set()
         if self._worker is None:
             self._worker = asyncio.create_task(self._run())
@@ -182,6 +194,15 @@ class MotionExecutor:
                         interrupted = True
                 if interrupted:
                     raise asyncio.CancelledError
+            elif reason == "cancelled" and self._baseline is not None:
+                try:
+                    from .posture import diagnostic_pose
+                    async with asyncio.timeout(self.stop_timeout):
+                        async with self.transport.session() as session:
+                            await session.pin_current_joints()
+                            self._baseline.held = diagnostic_pose(await session.diagnostics())
+                except Exception:
+                    self._trip("posture_hold_unconfirmed")
         finally:
             self._stopping = False
 
@@ -189,6 +210,8 @@ class MotionExecutor:
         async with self._control:
             self._closed = True
             await self._cancel("closed")
+            self._baseline = None
+            self._posture_seed = None
             self._wake.set()
         if self._worker is not None:
             await self._worker
@@ -198,12 +221,12 @@ class MotionExecutor:
             await self._wake.wait()
             self._wake.clear()
             while self._queue and not self._closed:
-                result, turn, admission_deadline, budget = self._queue.popleft()
+                result, turn, admission_deadline, budget, baseline_id = self._queue.popleft()
                 if turn != self._turn or time.monotonic() >= admission_deadline:
                     self._save(replace(result, status="expired", reason="stale_or_expired"))
                     continue
                 deadline = admission_deadline if budget is None else time.monotonic() + budget
-                self._active = asyncio.create_task(self._perform(result, deadline, admission_deadline=admission_deadline))
+                self._active = asyncio.create_task(self._perform(result, deadline, admission_deadline=admission_deadline, baseline_id=baseline_id))
                 try:
                     final = await self._active
                 except asyncio.CancelledError:
@@ -211,7 +234,7 @@ class MotionExecutor:
                 self._active = None
                 self._save(final)
 
-    async def _stop(self, session, uuid, *, hold=False):
+    async def _stop(self, session, uuid, *, hold=False, joint_hold=False):
         try:
             async with asyncio.timeout(self.stop_timeout):
                 try:
@@ -225,15 +248,24 @@ class MotionExecutor:
                 if event not in {"move_cancelled", "move_completed"}:
                     self._trip("move_failed_during_stop")
                     return False
-                if hold:
+                if joint_hold:
+                    await session.pin_current_joints()
+                elif hold:
                     await session.hold_current()
             return True
         except Exception:
             self._trip("stop_unconfirmed")
             return False
 
-    async def _perform(self, result, deadline, mapping=None, admission_deadline=None):
+    async def _perform(self, result, deadline, mapping=None, admission_deadline=None, baseline_id=None):
         mapping = mapping if mapping is not None else self.mappings[result.semantic_id]
+        if "posture_profile" in mapping:
+            from .posture import run_posture
+            async with asyncio.timeout_at(deadline):
+                outcome = await run_posture(self, result, deadline, admission_deadline, baseline_id)
+            if time.monotonic() >= deadline and outcome.status in {"completed", "cancelled"}:
+                outcome = replace(outcome, status="expired", reason="execution_budget_expired")
+            return outcome
         if "micro_profile" in mapping:
             from .micro import run_micro
             async with asyncio.timeout_at(deadline):
@@ -257,7 +289,7 @@ class MotionExecutor:
                     except Exception:
                         self._trip("start_outcome_unknown")
                         return replace(result, status="failed", reason=self._fault)
-                    confirmed = await self._stop(session, uuid, hold="_goto" in mapping)
+                    confirmed = await self._stop(session, uuid, hold="_goto" in mapping, joint_hold=mapping.get("_joint_hold",False))
                     return replace(result, uuid=uuid, status="cancelled" if confirmed else "failed", reason=self._fault)
                 self._save(replace(result, status="running", uuid=uuid), terminal=False)
                 try:
@@ -271,12 +303,12 @@ class MotionExecutor:
                     self._trip("move_failed")
                     return replace(result, status="failed", uuid=uuid, reason=self._fault)
                 except (asyncio.CancelledError, TimeoutError) as exc:
-                    confirmed = await self._stop(session, uuid, hold="_goto" in mapping)
+                    confirmed = await self._stop(session, uuid, hold="_goto" in mapping, joint_hold=mapping.get("_joint_hold",False))
                     status = "cancelled" if isinstance(exc, asyncio.CancelledError) else "expired"
                     return replace(result, uuid=uuid, status=status if confirmed else "failed", reason=self._fault)
                 except Exception:
                     self._trip("event_stream_lost")
-                    await self._stop(session, uuid, hold="_goto" in mapping)
+                    await self._stop(session, uuid, hold="_goto" in mapping, joint_hold=mapping.get("_joint_hold",False))
                     return replace(result, status="failed", uuid=uuid, reason=self._fault)
         except DaemonError as exc:
             if exc.uncertain:
