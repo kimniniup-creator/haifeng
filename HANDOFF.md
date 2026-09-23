@@ -14,7 +14,7 @@ Kim授权总控在D盘海风管理项目，寻找具体用途并自主做到交�
 本机.env已配置真实DeepSeek视觉模型和随机令牌，严禁读取后回显或提交。模型可在页面设置更改。持久化数据位于data/，不进Git。
 
 ## 当前硬件
-Reachy USB摄像头、USB音频和COM11可见。Daemon在8000返回error: No motors detected。不能说真机运动通过；需检查独立电源。PortAudio确有Reachy输出（Windows名称误写回音消除话筒），MME/44100Hz路径软件播放成功，WASAPI失败，不默认转电脑输出。audio_status=played_unverified，人工可闻验收未做。
+Reachy USB音频和COM11可见。Daemon曾running，但随后报Motor communication error，已请求一次不唤醒重连，不能声称运动已通过。此前MME/44100Hz返回播放结束，用户明确反馈没有声音。系统Reachy输出100%、未静音，WAV有有效波形。随后用官方SDK 1.11.0的GStreamerAudio.play_sound向Reachy WASAPI GUID播放“痛痛飞走了”，收到EOS无ERROR；现场可闻确认仍待完成。audio_status保持played_unverified。PyUSB控制接口未找到并不证明扬声器故障；未刷固件/改驱动/写DSP。官方客户端安装按用户纠正暂停，优先官方SDK接管与接口排查。
 
 Luma没有现场发现；上游有E06-0055真机验证记录，本机未复验。新增Python Bleak CLI，无Rust依赖；LUMA_MODE=python。CLI40秒整体时限，取消杀子进程。眼镜有电且解除手机占用后再测。
 
