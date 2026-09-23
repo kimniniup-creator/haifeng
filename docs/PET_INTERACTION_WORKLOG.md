@@ -22,3 +22,5 @@
 - 独立QA已复验12150fc的42项后端/进程/组合测试，包含false租约、两侧停止回执、称呼stop与播放回执身份；动作实体到位测试失败，保持设备动作关闭。
 - 动作0b999ac连同前置FK有界归一修正已纳入，pet_motion与owner该SHA逐文件diff一致。Controller传原始start_deadline+10s budget，等待不再按event TTL截断；新增已开始跨事件期限、租约unknown不误取消测试。
 - PR #4集中评审；原分支commit与远端一致，阶段文件均在本后台工作树，未抢写共享checkout。等待最终增量QA和总控裁决合main；真人连续语音/手势与动作到位仍独立验收。
+
+- Final follow-up: included motion read-only diagnosis (908810c) and bounded camera-window CLI (c38788d); retained default 15 seconds, explicit maximum 60. Focused vision suite: 25 passed, 1 skipped (real model absent in integration env); no camera opened by these tests. Corrected mapping handoff repository visibility to user-confirmed public. Backend PID46292 stays on tested software; these changes do not require its restart.
