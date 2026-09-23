@@ -52,13 +52,13 @@ def test_move_waits_for_matching_completion_event(monkeypatch):
     transport = httpx.MockTransport(lambda request: httpx.Response(200, json={'uuid': 'ours'}))
     monkeypatch.setattr(robot_adapter, 'connect', lambda *args, **kw: Socket())
     monkeypatch.setattr(robot_adapter.httpx, 'AsyncClient', lambda **kw: real_client(transport=transport))
-    robot = RobotAdapter('http://localhost:8000')
+    robot = RobotAdapter('http://localhost:8000', output_enabled=True)
     asyncio.run(robot._move([0.1, -0.1]))
     assert robot.move_id is None
 
 
 def test_response_preserves_motion_failure_when_audio_succeeds(monkeypatch):
-    robot = RobotAdapter('http://localhost:8000')
+    robot = RobotAdapter('http://localhost:8000', output_enabled=True)
     monkeypatch.setenv('TTS_ENABLED', 'true')
     robot.acknowledge = AsyncMock(return_value={'motion_status': 'failed', 'error_code': 'ROBOT_NOT_READY'})
     robot.speak = AsyncMock(return_value={'audio_status': 'completed', 'audio_verified': False})

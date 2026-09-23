@@ -35,6 +35,9 @@ if (-not $healthy) {
     }
     if (-not $healthy) { throw "Bridge did not start. Read $runtime\bridge.stderr.log" }
 }
-Write-Output 'Haifeng is ready at http://127.0.0.1:8088'
-if (Test-Path (Join-Path $root 'reachy-env\Scripts\reachy-mini-daemon.exe')) { & (Join-Path $root 'start_robot.ps1') }
+if ($null -eq $health.legacy_robot_output_enabled) {
+    throw 'An older bridge is already running without the output gate. Ask the maintenance owner to replace that process; this launcher will not restart it or touch the robot.'
+}
+Write-Output "Haifeng is ready at http://127.0.0.1:8088 (legacy robot output: $($health.legacy_robot_output_enabled))"
+if ($health.legacy_robot_output_enabled -eq $true -and (Test-Path (Join-Path $root 'reachy-env\Scripts\reachy-mini-daemon.exe'))) { & (Join-Path $root 'start_robot.ps1') }
 if (-not $NoBrowser) { Start-Process 'http://127.0.0.1:8088' }

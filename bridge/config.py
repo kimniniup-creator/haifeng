@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import json
 import os
@@ -40,6 +40,8 @@ class Settings:
     vision_model: str = os.getenv("VISION_MODEL", "")
     model_settings_managed: bool = False
     tts_enabled: bool = _boolean("TTS_ENABLED")
+    legacy_robot_output_enabled: bool = field(
+        default_factory=lambda: _boolean("LEGACY_ROBOT_OUTPUT_ENABLED"))
 
     @property
     def database_path(self) -> Path:
