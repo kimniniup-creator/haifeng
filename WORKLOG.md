@@ -128,3 +128,7 @@
 ## 2026-09-24 尺度分析独立QA
 - 固定PR13 b35a493，指标测试1pass；逐条比对两run旧字段及独立重算尺度统计一致。源码hash差异确认仅CRLF/LF。
 - 仅3文件分析/metadata改动，无运行时变化；640→960为未执行提案。证据docs/FACE_SCALE_QA.md，未运行模型或设备。
+
+## 2026-09-24 native ready导出候选QA
+- 固定5370a42，7项AST检查+4项补充测试通过；set/clear/None导出真实，错误/旧时间未掩盖。
+- 无原子快照保证，返回共享状态；ready不证明IK或跟踪健康。报告docs/NATIVE_READY_EXPORT_QA.md，未改native或碰设备/生产。
