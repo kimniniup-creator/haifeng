@@ -1,0 +1,613 @@
+[
+  {
+    "version": 1,
+    "candidate_id": "name",
+    "semantic_id": "ack",
+    "intent": "answer_call",
+    "emotion": "attentive",
+    "tier": "short",
+    "total_duration_ms": 800,
+    "variant_seed": 7,
+    "units": [
+      {
+        "motif_id": "ack:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.074074,
+        "gap_ms": 30,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          0,
+          0,
+          0
+        ],
+        "role": "onset"
+      },
+      {
+        "motif_id": "ack:1",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.074074,
+        "gap_ms": 120,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          0,
+          0,
+          0
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "ack:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.074074,
+        "gap_ms": 30,
+        "intensity": 1.05,
+        "pitch_curve_st": [
+          1,
+          1,
+          1
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "ack:1",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.074074,
+        "gap_ms": 40,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          -1,
+          -1,
+          -1
+        ],
+        "role": "closure"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "candidate_id": "moon",
+    "semantic_id": "curious",
+    "intent": "share_attention",
+    "emotion": "wonder",
+    "tier": "long",
+    "total_duration_ms": 1600,
+    "variant_seed": 7,
+    "units": [
+      {
+        "motif_id": "ack:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 0.991525,
+        "gap_ms": 30,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          0,
+          0,
+          0
+        ],
+        "role": "onset"
+      },
+      {
+        "motif_id": "ack:1",
+        "pitch_scale": 1.0,
+        "duration_scale": 0.991525,
+        "gap_ms": 120,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          0,
+          0,
+          0
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "curious:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 0.991525,
+        "gap_ms": 30,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          -1,
+          -1,
+          -1
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "curious:1",
+        "pitch_scale": 1.0,
+        "duration_scale": 0.991525,
+        "gap_ms": 30,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          1,
+          1,
+          1
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "happy:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 0.991525,
+        "gap_ms": 30,
+        "intensity": 1.05,
+        "pitch_curve_st": [
+          2,
+          2,
+          2
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "curious:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 0.991525,
+        "gap_ms": 120,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          1,
+          1,
+          1
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "curious:1",
+        "pitch_scale": 1.0,
+        "duration_scale": 0.991525,
+        "gap_ms": 30,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          0,
+          0,
+          0
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "ack:1",
+        "pitch_scale": 1.0,
+        "duration_scale": 0.991525,
+        "gap_ms": 40,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          -2,
+          -2,
+          -2
+        ],
+        "role": "closure"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "candidate_id": "happy",
+    "semantic_id": "happy",
+    "intent": "celebrate",
+    "emotion": "joy",
+    "tier": "long",
+    "total_duration_ms": 1600,
+    "variant_seed": 7,
+    "units": [
+      {
+        "motif_id": "ack:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.231579,
+        "gap_ms": 120,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          0,
+          0,
+          0
+        ],
+        "role": "onset"
+      },
+      {
+        "motif_id": "happy:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.231579,
+        "gap_ms": 30,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          1,
+          1,
+          1
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "happy:1",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.231579,
+        "gap_ms": 30,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          2,
+          2,
+          2
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "happy:2",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.231579,
+        "gap_ms": 120,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          1,
+          1,
+          1
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "happy:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.231579,
+        "gap_ms": 30,
+        "intensity": 1.05,
+        "pitch_curve_st": [
+          2,
+          2,
+          2
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "happy:1",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.231579,
+        "gap_ms": 30,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          3,
+          3,
+          3
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "happy:2",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.231579,
+        "gap_ms": 30,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          1,
+          1,
+          1
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "ack:1",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.231579,
+        "gap_ms": 40,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          -1,
+          -1,
+          -1
+        ],
+        "role": "closure"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "candidate_id": "curious",
+    "semantic_id": "curious",
+    "intent": "invite_response",
+    "emotion": "curiosity",
+    "tier": "normal",
+    "total_duration_ms": 1200,
+    "variant_seed": 7,
+    "units": [
+      {
+        "motif_id": "ack:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.116883,
+        "gap_ms": 120,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          0,
+          0,
+          0
+        ],
+        "role": "onset"
+      },
+      {
+        "motif_id": "curious:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.116883,
+        "gap_ms": 30,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          -1,
+          -1,
+          -1
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "curious:1",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.116883,
+        "gap_ms": 120,
+        "intensity": 1.05,
+        "pitch_curve_st": [
+          1,
+          1,
+          1
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "curious:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.116883,
+        "gap_ms": 30,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          0,
+          0,
+          0
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "curious:1",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.116883,
+        "gap_ms": 40,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          2,
+          2,
+          2
+        ],
+        "role": "closure"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "candidate_id": "uncertain",
+    "semantic_id": "uncertain",
+    "intent": "request_repair",
+    "emotion": "uncertainty",
+    "tier": "normal",
+    "total_duration_ms": 1200,
+    "variant_seed": 7,
+    "units": [
+      {
+        "motif_id": "uncertain:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.283784,
+        "gap_ms": 30,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          0,
+          0,
+          0
+        ],
+        "role": "onset"
+      },
+      {
+        "motif_id": "uncertain:1",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.283784,
+        "gap_ms": 120,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          -1,
+          -1,
+          -1
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "thinking:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.283784,
+        "gap_ms": 30,
+        "intensity": 1.05,
+        "pitch_curve_st": [
+          -1,
+          -1,
+          -1
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "curious:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.283784,
+        "gap_ms": 30,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          0,
+          0,
+          0
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "curious:1",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.283784,
+        "gap_ms": 40,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          1,
+          1,
+          1
+        ],
+        "role": "closure"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "candidate_id": "thinking",
+    "semantic_id": "thinking",
+    "intent": "hold_turn",
+    "emotion": "reflective",
+    "tier": "short",
+    "total_duration_ms": 800,
+    "variant_seed": 7,
+    "units": [
+      {
+        "motif_id": "thinking:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.26087,
+        "gap_ms": 30,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          0,
+          0,
+          0
+        ],
+        "role": "onset"
+      },
+      {
+        "motif_id": "thinking:1",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.26087,
+        "gap_ms": 120,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          -1,
+          -1,
+          -1
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "thinking:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.26087,
+        "gap_ms": 30,
+        "intensity": 1.05,
+        "pitch_curve_st": [
+          0,
+          0,
+          0
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "thinking:1",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.26087,
+        "gap_ms": 40,
+        "intensity": 0.92,
+        "pitch_curve_st": [
+          0,
+          0,
+          0
+        ],
+        "role": "closure"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "candidate_id": "sleepy",
+    "semantic_id": "sleepy",
+    "intent": "close_turn",
+    "emotion": "drowsy",
+    "tier": "normal",
+    "total_duration_ms": 1200,
+    "variant_seed": 7,
+    "units": [
+      {
+        "motif_id": "ack:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.484848,
+        "gap_ms": 120,
+        "intensity": 0.8,
+        "pitch_curve_st": [
+          0,
+          0,
+          0
+        ],
+        "role": "onset"
+      },
+      {
+        "motif_id": "sleepy:0",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.484848,
+        "gap_ms": 30,
+        "intensity": 0.8,
+        "pitch_curve_st": [
+          0,
+          0,
+          0
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "sleepy:1",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.484848,
+        "gap_ms": 30,
+        "intensity": 0.8,
+        "pitch_curve_st": [
+          -1,
+          -1,
+          -1
+        ],
+        "role": "body"
+      },
+      {
+        "motif_id": "sleepy:1",
+        "pitch_scale": 1.0,
+        "duration_scale": 1.484848,
+        "gap_ms": 40,
+        "intensity": 0.8,
+        "pitch_curve_st": [
+          -2,
+          -2,
+          -2
+        ],
+        "role": "closure"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "candidate_id": "interrupted",
+    "semantic_id": "ack",
+    "intent": "interrupted",
+    "emotion": "neutral",
+    "tier": "silent",
+    "total_duration_ms": 0,
+    "variant_seed": 7,
+    "units": []
+  },
+  {
+    "version": 1,
+    "candidate_id": "stop",
+    "semantic_id": "ack",
+    "intent": "stop",
+    "emotion": "neutral",
+    "tier": "silent",
+    "total_duration_ms": 0,
+    "variant_seed": 7,
+    "units": []
+  },
+  {
+    "version": 1,
+    "candidate_id": "quiet",
+    "semantic_id": "ack",
+    "intent": "quiet",
+    "emotion": "neutral",
+    "tier": "silent",
+    "total_duration_ms": 0,
+    "variant_seed": 7,
+    "units": []
+  }
+]

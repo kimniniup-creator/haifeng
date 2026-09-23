@@ -117,3 +117,12 @@ Kim changed target during testing: tentative name 啾啾, short mechanical speci
 
 ## 啾啾本地声音交接 — 2026-09-24
 Current service: independent pet_companion.py on 127.0.0.1:7860, SenseVoice Chinese + Silero VAD + original mechanical chirps. See patches/reachy_companion/README.md for exact startup, rollback, test and Agent transport details. Old official Conversation App is stopped; daemon and bridge are unchanged. No dedicated wake word yet. Agent consumer must subscribe on /events before responding via /api/agent-result; no second speech engine should be started. Turn identity is authoritative in voice service. Completed output receipt means last buffer submission, not physical audibility. Live semantic/backend integration, room ASR and natural interruption remain acceptance limits.
+
+
+## 2026-09-24 啾啾语离线研究（P2）
+
+- 独立分支 codex/jiujiu-language-study，仅研究/离线生成；现有生产音色不改、动作 P0 优先。
+- 研究与接口：research/jiujiu-language/README.md、phrases.json；脚本 tools/jiujiu_language/render.py。真实库存为 13 个 FM 滑音单元，不是六个词或人声音素。
+- 七个 0.8/1.2/1.6 秒候选、420 ms gate 打断示例、六个旧版 WAV 已生成到忽略目录 qa-artifacts/jiujiu-language；LISTEN.md 为本地点击试听索引，measurements.json 为测量证据。无私人录音，无设备操作。
+- 新 4 项与旧 gate 10 项测试通过；候选 peak < .16，时长误差小于 1 ms，取消后 PCM 归零。未做人类听测/实体听感验收，未宣称自然语言可懂。
+- 语音 owner 为唯一生产消费者；交付静态 phrase plan，session/epoch/TTL 由运行时注入。当前 deadline 覆盖整段，长句不能直接塞入 1 秒试听路径；不得扩大 TTL 或拆 response 绕过 gate。后续由 owner 在 P2 排期评审，无即时实施依赖。
