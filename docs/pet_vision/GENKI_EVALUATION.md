@@ -49,6 +49,16 @@ python -m pytest tests/test_pet_vision_evaluation.py tests/test_pet_vision_face.
 
 The script pins the archive hash, sample seed, static threshold and quality settings. It records model/source hashes and metrics in ignored `.runtime/genki-smile-evaluation.json`. It permits at most 512 samples per class and only writes evaluation metadata below the worktree `.runtime`. Metric unit tests explicitly prevent unknowns from becoming true negatives and verify both decided-only and full-denominator rates. The combined metric+face tests passed 12/12 locally with the real face model present.
 
+## Provenance limit of the recorded 256-image run
+
+The saved original metrics JSON was generated before `detector_source_sha256`
+was added to the evaluation script, so that field is absent in this run. The
+script's current ability to emit a source hash does not retroactively establish
+the source bytes used for the old result. Do not backfill or replace the original
+evidence. Independent QA verified the saved counts and denominators, not a fresh
+inference replay; see `../GENKI_EVALUATION_QA.md`. Any subsequent scale analysis
+must save a separate run and cannot be mixed into these 256-image results.
+
 ## Other candidates checked, not downloaded or used
 
 - [AffectNet official page](https://www.mohammadmahoor.com/pages/databases/affectnet/) and [academic-use agreement](https://mohammadmahoor.com/wp-content/uploads/2024/06/AffectNet-Agreement-v2.1-10May2024.pdf): research/academic access terms, not a blanket commercial grant. Not downloaded, trained on or evaluated here.
