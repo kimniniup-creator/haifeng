@@ -100,6 +100,10 @@ def main():
             elif face:
                 reasons.extend(face.quality.get('reasons',[]))
             rows.append(dict(sample_id=index,label=labels[index-1],single_face=single,
+                             image_width=int(frame.shape[1]),image_height=int(frame.shape[0]),
+                             face_pixels=face.quality.get('face_pixels') if face else None,
+                             face_width_fraction=(face.bbox[2]-face.bbox[0]) if face else None,
+                             face_height_fraction=(face.bbox[3]-face.bbox[1]) if face else None,
                              quality_usable=not reasons,quality_reasons=sorted(set(reasons)),
                              smile_left=face.coefficients.get('mouthSmileLeft',0.) if face else None,
                              smile_right=face.coefficients.get('mouthSmileRight',0.) if face else None))
