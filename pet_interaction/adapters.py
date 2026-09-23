@@ -76,5 +76,3 @@ def as_result(result):
     if is_dataclass(result):
         return asdict(result)
     return {"status": "failed", "reason": "invalid_adapter_result"}
-
-
