@@ -159,3 +159,28 @@ python -m pytest tests/test_pet_interaction.py tests/test_pet_interaction_integr
 - 源码审查确认读取失败立即退出、finally释放采集句柄与lease；原生卡死使用自身进程退出兜底。软件检查不等于真实长期运行、真人手势识别或实体动作通过。
 
 **结论：该固定版本无已知软件合并/已授权唯一producer部署阻断。** 交集成负责人合并、视觉owner在协调窗口部署；QA不部署、不操作设备、不重跑107项。motion dry-run及映射/profile未批准边界保持。owner报告的60秒实采264不同帧、66 accepted及backend状态转换仅作转达证据，不计入QA亲测。
+
+## 显式抬头闭环初审（2026-09-24）
+
+固定 `833b903b4405f2a661521499f3250ea2c296cbde` 含只读diagnostics前置版本；独立运行motion、micro、posture、telemetry及两项QA复现：**59 passed，2 failed，45.90秒**，另有一项Starlette/AnyIO弃用警告。只使用假设备、测试API和内存，未访问SDK、实机或媒体。
+
+1. **P1：保持后停止的调用者取消会提前恢复准入。** 首次look_up成功后，idle baseline分支在pin_current_joints验证await期间被调用方取消；CancelledError未被except Exception处理，finally清除stopping。复现确认available=True、baseline仍在，但保持没有完成验证。要求有界独立hold任务受shield保护，调用者取消也须等到验证完成或故障锁定；未确认不得恢复准入。
+2. **P2：重复抬头绕过目标追踪误差检查。** 首次成功后仅将目标关节之一增加0.02 rad，实测pose不变；重复look_up返回completed/already_looking_up。previous分支在0.005 rad目标追踪门禁前直接成功。要求重复路径也验证目标误差和稳定保持，不能以单次姿态匹配宣告成功。
+
+两项已交唯一动作owner修复并回传固定SHA，**本版本暂不给实体探测软件放行**。显式baseline ID、120秒不刷新、故障清公开baseline等已有静态/单元覆盖，但跨认证session绑定由上层服务负责，本模块的opaque turn变化本身不会清baseline，仍需集成验收。默认所有mapping/profile未批准；离线通过也不等于方向、到位、保持、停止和回原点的真实闭环通过。
+
+动作修复 `45621f5c143673bb28d8a38ffa1665074fcecebc` 独立增量 **20 passed，35.76秒**：posture12项、owner新增regression4项、QA独立4项。覆盖idle stop调用者取消等待验证成功/超时故障后才传播、重复抬头即时/稳定窗口内tracking偏差拒绝；另验证发送成功但IK仍开启不确认pin、竞争动作在connect/send前拒绝。上述两项模块缺陷关闭。
+
+组合 `59b7e90d209cd258e9c933f89f2c9058797fc861` 发现跨session旧ID重绑定：voice1成功抬头→voice2清上层baseline→voice2再抬头，真实MotionExecutor返回同一个already_looking_up ID，上层把它重绑到voice2并重算期限。组合修复 `3a701fb91aca6de32aa51b5910417eeeb2f16a12` 拒绝该路径，但另一真实组合复现仍失败：voice1首次动作中断已有private seed、尚无公开baseline→voice2抬头从旧seed产生holding_verified新ID并绑定。两项独立组合测试 **1 passed，1 failed**；要求session失效保留私有原点防累加，同时禁止新session从旧原点重签。已交动作/集成owner共同修复，组合暂不放行。
+
+该组合遥测/安装器另独立 **5 passed**（1项既有Starlette弃用警告），只在临时目录验证安装幂等、断开uv硬链接不改缓存inode、回滚恢复、拒绝覆盖后续修改，以及只读路由字段；没有安装到生产SDK或重启服务。
+
+### PR #8 最终固定组合复验
+
+[PR #8](https://github.com/kimniniup-creator/haifeng/pull/8) head `38a03332761222ef39cb12751a95bed85add2bd3` 已核对远端。独立源码快照运行controller、interaction integration、posture、posture regression四组仓库测试及三个QA文件：**88 passed，0 skipped，52.90秒**（79项仓库测试、9项独立QA检查）。没有重跑无变化的107项旧全套；遥测/安装器相对已独立通过5项的3a701fb无变化。
+
+- 原两项动作缺陷与两条跨session组合复现均通过。新session/断连调用显式invalidate_baseline：有姿态历史或在途姿态时锁定后续姿态、清公开ID，保留private seed防累加；同session新epoch仍可显式返回，120秒期限不续租。上层只接受当前active decision的结果；失效任务晚到结果不能重新写入baseline。
+- owner-only review_reset不接语音路由，只读检查原seed.origin持续稳定、可信零offset和合格tracking后才解锁。独立补测取消review、非零offset、tracking偏差均保持退休锁和seed、不签baseline、不发送新动作。owner回归覆盖过期seed仍须匹配原点才能恢复。
+- 88项包含真实Controller和MotionExecutor配假设备的首次动作中断、换session/断连重签拒绝，以及真实语音模块ASGI/内存PCM组合；没有播放声音或操作硬件。所有approved变更仅存在于测试内存，仓库默认mapping/profile仍false。
+
+**最终软件结论：该固定组合无已知阻断，可在设备恢复且维护owner交回独占窗口后，由已授权动作owner进行受控小幅实机验证。** 本结论不批准生产映射，不等于“啾啾，抬头”实体闭环已完成。真实方向、目标到位、持续保持、停止关节pin及显式回原点仍须逐项现场验收；QA未访问设备、SDK或生产API，未进行重启或部署。

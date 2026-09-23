@@ -12,6 +12,79 @@ from pet_vision import GestureEngine, Observation
 from pet_vision.synthetic import open_hand
 
 
+def test_explicit_look_up_uses_real_executor_without_fabricating_baseline():
+    async def scenario():
+        pet = PetController(motion=MotionExecutor())
+        await pet.voice_turn("look-session", 1, 1)
+        packet = {"schema_version": 1, "source": "voice", "session_id": "look-session",
+                  "event_id": "look-event", "kind": "speech_final", "observed_at": time.time(),
+                  "ttl_seconds": 5, "confidence": 1, "epoch": 1, "turn_id": 1,
+                  "input_id": "look-input", "payload": {"text": "啾啾抬头"}}
+        receipt = await pet.handle(packet)
+        await pet.drain()
+        result = pet.decisions[receipt["decision_id"]]
+        assert result["semantic_id"] == "look_up"
+        assert result["motion"]["status"] == "dry_run"
+        assert result["motion"]["baseline_id"] is None
+        assert pet.motion_baseline is None
+        await pet.voice_turn("look-session", 2, 2)
+        packet.update(event_id="return-event", epoch=2, turn_id=2, input_id="return-input",
+                      observed_at=time.time(), payload={"text": "回到抬头前的位置"})
+        assert (await pet.handle(packet))["reason"] == "no_valid_motion_baseline"
+        await pet.close()
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("boundary", ["new_session", "disconnect", "inflight_disconnect", "inflight_new_session", "expiry"])
+def test_real_executor_never_reissues_an_old_session_origin(boundary):
+    from test_pet_motion_posture import PostureDaemon
+    async def scenario():
+        daemon = PostureDaemon()
+        motion = MotionExecutor(daemon, dry_run=False)
+        for key in ("look_up", "return_to_start"):
+            motion.mappings[key]["approved"] = True
+        motion.posture_profiles["look_up"]["approved"] = True
+        pet = PetController(motion=motion)
+        async def command(session, epoch, text):
+            await pet.voice_turn(session, epoch, epoch)
+            return await pet.handle({"schema_version": 1, "source": "voice", "session_id": session,
+                "event_id": f"{session}-{epoch}", "kind": "speech_final", "observed_at": time.time(),
+                "ttl_seconds": 2.5, "confidence": 1, "epoch": epoch, "turn_id": epoch,
+                "input_id": f"input-{session}-{epoch}", "payload": {"text": text}})
+        try:
+            if boundary.startswith("inflight_"):
+                daemon.auto_complete = False
+            await command("old", 1, "抬头")
+            if boundary.startswith("inflight_"):
+                await asyncio.wait_for(daemon.started.wait(), 2)
+                if boundary == "inflight_disconnect":
+                    await pet.disconnect_voice()
+                    await pet.disconnect_voice()  # Repeated invalidation must stay closed.
+                else:
+                    await pet.voice_turn("new", 2, 2)
+                await pet.drain()
+                daemon.auto_complete = True
+            else:
+                await pet.drain()
+                assert pet.motion_baseline
+                if boundary == "disconnect":
+                    await pet.disconnect_voice()
+                elif boundary == "expiry":
+                    pet.motion_baseline["expires_at"] = time.time()-1
+                    motion._baseline.expires = time.monotonic()-1
+            before = len(daemon.starts)
+            session = "old" if boundary == "expiry" else "new"
+            receipt = await command(session, 2, "抬头")
+            await pet.drain()
+            assert pet.decisions[receipt["decision_id"]]["motion"]["status"] != "completed"
+            assert len(daemon.starts) == before
+            assert (await command(session, 3, "回到刚才的位置"))["reason"] == "no_valid_motion_baseline"
+            assert len(daemon.starts) == before
+        finally:
+            await pet.close()
+    asyncio.run(scenario())
+
+
 def test_real_gesture_engine_to_real_dryrun_motion_adapter():
     async def scenario():
         now=[time.time()]

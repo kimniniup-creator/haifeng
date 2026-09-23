@@ -1,5 +1,7 @@
 """REST + subscribed-before-start events. Never retry physical requests."""
 import json
+import asyncio
+import time
 from contextlib import asynccontextmanager
 from urllib.parse import quote
 from uuid import UUID
@@ -103,3 +105,38 @@ class _Session:
         response.raise_for_status()
         if response.json().get("status") != "ok":
             raise DaemonError("hold_not_applied", uncertain=True)
+
+    async def diagnostics(self):
+        # Fails closed if the maintenance-installed read-only route is absent.
+        await self.snapshot()
+        response = await self.client.get(self.base_url + "/api/state/motion-diagnostics")
+        response.raise_for_status()
+        return response.json()
+
+    async def pin_current_joints(self):
+        from .posture import diagnostic_pose
+        import numpy as np
+        before = diagnostic_pose(await self.diagnostics())
+        joints = before["joints"]
+        url = self.base_url.replace("https://", "wss://", 1).replace("http://", "ws://", 1) + "/ws/sdk"
+        async with connect(url, open_timeout=2, close_timeout=1, proxy=None) as socket:
+            # Native SDK commands are fire-and-forget; there is NO ack. Verify
+            # actual backend target values and stable measured joints instead.
+            await socket.send(json.dumps({"type":"set_head_joints", "joints":joints.tolist()}))
+            until = time.monotonic() + 3
+            stable_since = None
+            while time.monotonic() < until:
+                diag = await self.diagnostics()
+                actual = diagnostic_pose(diag)
+                pinned = (np.max(np.abs(actual["target_joints"]-joints)) <= 1e-6
+                          and np.max(np.abs(actual["joints"]-joints)) <= .005
+                          and np.max(np.abs(actual["antennas"]-before["antennas"])) <= .01
+                          and diag.get("ik_required") is False)
+                if pinned:
+                    stable_since = time.monotonic() if stable_since is None else stable_since
+                    if time.monotonic()-stable_since >= 1.0:
+                        return
+                else:
+                    stable_since = None
+                await asyncio.sleep(.05)
+        raise DaemonError("joint_hold_unconfirmed", uncertain=True)

@@ -29,6 +29,7 @@ class PetController:
         self.started_at = clock()
         self.state, self.present = "quiet", None
         self.voice_context = None
+        self.motion_baseline = None
         self.voice_connected = False
         self.retired_voice_sessions = set()
         self.voice_busy_until = 0.0
@@ -67,6 +68,8 @@ class PetController:
             "physical_verified": False}
         voice_receipt = {"status": "failed", "reason": type(voice).__name__} if isinstance(voice, Exception) else voice
         self.last_stop = {"motion": motion_receipt, "voice": voice_receipt}
+        if motion_receipt["status"] == "failed":
+            self.motion_baseline = None
         return self.last_stop
 
     def _invalidate(self):
@@ -110,6 +113,7 @@ class PetController:
                 if len(self.retired_voice_sessions) >= self.capacity:
                     return {"status": "rejected", "reason": "session_capacity"}
                 self.retired_voice_sessions.add(current["session_id"])
+                self.motion_baseline = None
             self._invalidate()
             self.voice_context = {"session_id": session_id, "epoch": epoch, "turn_id": turn_id, "input_id": input_id}
             self.voice_final = None
@@ -118,18 +122,22 @@ class PetController:
             resting = self.rest_requested
             self.stopped = resting or reason in {"interrupt", "stop", "manual_preview", "audition", "muted", "mute", "overflow"}
             self.state = "resting" if resting else ("quiet" if self.stopped or reason == "snapshot" else "attention")
-            await self.motion.cancel()
+            if current and current["session_id"] != session_id:
+                await self.motion.invalidate_baseline()
+            else:
+                await self.motion.cancel()
             return {"status": "accepted"}
 
     async def disconnect_voice(self):
         async with self.lock:
             self.voice_connected = False
+            self.motion_baseline = None
             if self.voice_context:
                 self.retired_voice_sessions.add(self.voice_context["session_id"])
             self.voice_busy_until = 0
             self._invalidate()
             self.state = "resting" if self.rest_requested else "quiet"
-            await self.motion.cancel()
+            await self.motion.invalidate_baseline()
 
     async def handle(self, raw):
         now = self.clock()
@@ -203,6 +211,14 @@ class PetController:
             if was_present is True:
                 return {"status": "accepted", "reason": "presence_refreshed", "state": self.state}
         wake = event.kind == "wake" or intent == "wake"
+        if intent == "return_to_start":
+            baseline = self.motion_baseline
+            if not baseline or baseline["session_id"] != event.session_id or now >= baseline["expires_at"]:
+                self.motion_baseline = None
+                return {"status": "rejected", "reason": "no_valid_motion_baseline"}
+            # An explicit return may resume after stop, but does not wake from rest.
+            if not self.rest_requested:
+                self.stopped = False
         if self.stopped and not wake:
             return {"status": "suppressed", "reason": "stopped"}
         if wake:
@@ -255,8 +271,15 @@ class PetController:
                 if not self._live(event, decision):
                     decision.update(status="dropped", reason="stale_or_expired")
                     return
+                extra = {}
+                if decision["semantic_id"] == "return_to_start":
+                    baseline = self.motion_baseline
+                    if not baseline or baseline["session_id"] != event.session_id or self.clock() >= baseline["expires_at"]:
+                        decision.update(status="dropped", reason="no_valid_motion_baseline")
+                        return
+                    extra["baseline_id"] = baseline["baseline_id"]
                 motion = as_result(await self.motion.submit(decision["semantic_id"], token, event.expires_at - self.clock(), request_id=decision["decision_id"],
-                    start_deadline=event.expires_at, execution_budget_seconds=self.execution_budget_seconds))
+                    start_deadline=event.expires_at, execution_budget_seconds=self.execution_budget_seconds, **extra))
                 decision["motion"] = motion
                 self.state = "responding"
             # Voice service performs its own final identity/expiry checks, including during playback.
@@ -278,6 +301,20 @@ class PetController:
                 if self.active_id != decision["decision_id"]:
                     decision["status"] = "interrupted"
                     return
+                result = decision["motion"]
+                if decision["semantic_id"] == "look_up" and result.get("status") == "completed" and result.get("baseline_id"):
+                    baseline_id = identifier(result["baseline_id"], "baseline_id")
+                    # Original source time is conservative; repeats never extend the lease.
+                    if result.get("reason") == "already_looking_up":
+                        if not self.motion_baseline or self.motion_baseline["baseline_id"] != baseline_id or self.motion_baseline["session_id"] != event.session_id:
+                            decision["motion"] = {"status": "rejected", "reason": "baseline_session_mismatch"}
+                    elif result.get("reason") == "holding_verified":
+                        self.motion_baseline = {"baseline_id": baseline_id, "session_id": event.session_id,
+                                                "expires_at": event.observed_at + 120}
+                elif decision["semantic_id"] == "return_to_start":
+                    self.motion_baseline = None
+                if getattr(self.motion, "fault", ""):
+                    self.motion_baseline = None
                 statuses = [decision["motion"].get("status"), decision.get("voice", {}).get("status")]
                 decision["status"] = "failed" if any(s in {"failed", "rejected", "expired", "stale", "disconnected"} for s in statuses) else "dispatched"
                 # 'dispatched' includes dry_run/queued, never claims physically completed.

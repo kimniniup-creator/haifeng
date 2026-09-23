@@ -281,6 +281,109 @@ def test_minimal_language_intents(text, intent, sound):
     run(scenario())
 
 
+@pytest.mark.parametrize("text", ["抬头", "啾啾，抬一下头！", "揪揪抬起头", "舅舅抬头看看"])
+def test_look_up_keeps_distinct_semantic_and_original_identity(text):
+    async def scenario():
+        clock = Clock(); pet = PetController(clock=clock)
+        await pet.voice_turn("voice1", 1, 1)
+        packet = speech(clock); packet["payload"] = {"text": text}
+        receipt = await pet.handle(packet)
+        await pet.drain()
+        decision = pet.decisions[receipt["decision_id"]]
+        assert decision["intent"] == decision["semantic_id"] == "look_up"
+        assert decision["motion"]["status"] == "dry_run"
+        assert decision["start_deadline"] == packet["observed_at"] + packet["ttl_seconds"]
+        assert decision["input_id"] == "input1" and decision["turn_id"] == 1
+        assert pet.voice.calls[0]["semantic_id"] == "ack"
+        assert packet["payload"]["text"] == text
+        assert (await pet.handle(packet))["status"] == "duplicate"
+        await pet.close()
+    run(scenario())
+
+
+def test_return_requires_verified_baseline_and_keeps_it_across_voice_epochs():
+    class VerifiedMotion(FakeMotion):
+        async def submit(self, semantic, turn_id, ttl_seconds, request_id=None, *, baseline_id=None, **kwargs):
+            await super().submit(semantic, turn_id, ttl_seconds, request_id, **kwargs)
+            if semantic == "return_to_start":
+                assert baseline_id == "verified-baseline"
+                return {"status": "completed"}
+            return {"status": "completed", "reason": "holding_verified", "baseline_id": "verified-baseline"}
+    async def scenario():
+        clock = Clock(); pet = PetController(motion=VerifiedMotion(), clock=clock)
+        async def command(text, epoch):
+            await pet.voice_turn("voice1", epoch, epoch)
+            packet = speech(clock, event_id=f"e{epoch}")
+            packet.update(epoch=epoch, turn_id=epoch, input_id=f"i{epoch}", payload={"text": text})
+            result = await pet.handle(packet); await pet.drain()
+            return result
+        assert (await command("回到刚才的位置", 1))["reason"] == "no_valid_motion_baseline"
+        await command("抬头", 2)
+        assert pet.motion_baseline["baseline_id"] == "verified-baseline"
+        await command("停下", 3)
+        assert pet.stopped and pet.motion_baseline
+        receipt = await command("回到刚才的位置", 4)
+        assert pet.decisions[receipt["decision_id"]]["motion"]["status"] == "completed"
+        assert pet.motion_baseline is None
+        await pet.close()
+    run(scenario())
+
+
+@pytest.mark.parametrize("invalidate", ["expired", "new_session", "disconnect", "stop_fault"])
+def test_baseline_is_not_reused_after_invalidation(invalidate):
+    async def scenario():
+        clock = Clock(); pet = PetController(clock=clock)
+        await pet.voice_turn("voice1", 1, 1)
+        pet.motion_baseline = {"baseline_id": "prior", "session_id": "voice1", "expires_at": clock()+120}
+        session = "voice1"
+        if invalidate == "expired": clock.now += 121
+        elif invalidate == "new_session":
+            session = "voice2"
+            await pet.voice_turn(session, 2, 2)
+        elif invalidate == "disconnect": await pet.disconnect_voice()
+        else:
+            pet.motion.fault = "stop_unconfirmed"
+            await pet._stop_outputs()
+        if invalidate == "disconnect":
+            assert pet.motion_baseline is None
+        else:
+            await pet.voice_turn(session, 3, 3)
+            packet = speech(clock); packet.update(session_id=session, epoch=3, turn_id=3, payload={"text":"回到原来的位置"})
+            assert (await pet.handle(packet))["reason"] == "no_valid_motion_baseline"
+        assert not pet.motion.calls
+        await pet.close()
+    run(scenario())
+
+
+def test_dry_run_look_up_never_creates_return_baseline():
+    async def scenario():
+        clock = Clock(); pet = PetController(clock=clock)
+        await pet.voice_turn("voice1", 1, 1)
+        packet = speech(clock); packet["payload"] = {"text": "抬头"}
+        await pet.handle(packet); await pet.drain()
+        assert pet.motion_baseline is None
+        await pet.close()
+    run(scenario())
+
+
+def test_new_session_cannot_rebind_old_baseline_from_repeated_look_up():
+    class HeldMotion(FakeMotion):
+        async def submit(self, *args, **kwargs):
+            await super().submit(*args, **kwargs)
+            return {"status": "completed", "reason": "already_looking_up", "baseline_id": "old-baseline"}
+    async def scenario():
+        clock = Clock(); pet = PetController(motion=HeldMotion(), clock=clock)
+        await pet.voice_turn("old-session", 1, 1)
+        pet.motion_baseline = {"baseline_id": "old-baseline", "session_id": "old-session", "expires_at": clock()+120}
+        await pet.voice_turn("new-session", 1, 1)
+        packet = speech(clock); packet.update(session_id="new-session", payload={"text": "抬头"})
+        receipt = await pet.handle(packet); await pet.drain()
+        assert pet.motion_baseline is None
+        assert pet.decisions[receipt["decision_id"]]["motion"]["reason"] == "baseline_session_mismatch"
+        await pet.close()
+    run(scenario())
+
+
 @pytest.mark.parametrize("text", ["啾啾停一下", "揪揪，停下！", "舅舅安静", "啾啾停一下不要再说了"])
 def test_named_stop_precedes_wake_and_never_emits_sound(text):
     async def scenario():
