@@ -33,7 +33,7 @@ Set-Location haifeng
 
 ## 配置与隐私
 
-可参考 `.env.example` 建立本机 `.env`。`LUMA_MODE=python` 使用 Bleak，`LUMA_DEVICE` 可填设备广播名称或地址；不填写时仅在唯一候选设备存在时连接。`TTS_ENABLED=true` 使用 Windows 本地中文语音合成，输出明确绑定 Reachy 音频设备；失败不会静默改用电脑扬声器。
+可参考 `.env.example` 建立本机 `.env`。`LUMA_MODE=python` 使用 Bleak，`LUMA_DEVICE` 可填设备广播名称或地址；不填写时仅在唯一候选设备存在时连接。旧 8088 桥的 `LEGACY_ROBOT_OUTPUT_ENABLED` 默认 false：消息回答和眼镜拍照保留，旧天线动作、TTS 播放及取消时的硬件 stop 全部关闭；`TTS_ENABLED=true` 不能绕过这个门禁。该设置在进程启动时读取，修改文件不改变已运行的旧进程。`/v1/health` 返回实际门禁值；字段缺失说明仍是旧版本，`start.ps1` 会拒绝将其视为新版本，并且默认不调用 `start_robot.ps1`。如需恢复旧硬件路径，须在独占维护窗口明确设 `LEGACY_ROBOT_OUTPUT_ENABLED=true` 并替换进程；旧路径仍不具备新动作执行器的租约/批准保护。TTS 仅在两项开关都开启时使用 Windows 本地中文合成，明确绑定 Reachy 音频设备。详见 `docs/LEGACY_OUTPUT_GATE.md`。
 
 页面设置更改的模型配置保存在 `data/settings.json`，优先于旧环境配置。图片和对话保留在 `data/`，直到主动删除片段。发送文字/图片时内容会交给配置的模型服务；本地存储不代表离线推理。不要提交 `.env`、`data/` 或运行日志。
 

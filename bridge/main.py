@@ -21,7 +21,7 @@ settings.bootstrap()
 store = SessionStore(settings.database_path)
 media = MediaStore(settings.image_dir)
 model = ModelAdapter(settings.model_base_url, settings.model_api_key, settings.vision_model)
-robot = RobotAdapter(settings.reachy_base_url)
+robot = RobotAdapter(settings.reachy_base_url, output_enabled=settings.legacy_robot_output_enabled)
 luma = LumaAdapter(settings.luma_mode, settings.luma_cli_path)
 worker = RequestWorker(store, media, model, robot, luma)
 
@@ -87,7 +87,8 @@ app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), na
 
 @app.get("/v1/health")
 async def health():
-    return {"status": "ok", "service": "luma-reachy-bridge", "version": APP_VERSION}
+    return {"status": "ok", "service": "luma-reachy-bridge", "version": APP_VERSION,
+            "legacy_robot_output_enabled": robot.output_enabled}
 
 
 @app.get("/v1/bootstrap", dependencies=[Depends(local_only)])

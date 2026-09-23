@@ -112,3 +112,19 @@ LOOK_UP.md is the cross-owner and second-host interface handoff.
 - Integration QA demonstrated first-action interruption could leave a private origin that a later session reused to issue a new public baseline. Added explicit session invalidation separate from utterance cancellation, retaining seed but rejecting postures until owner review.
 - Added owner-only read-only review reset requiring stable original measured pose, zero offsets and joint tracking, with no motion/queue/fault. It cannot clear faults and is not exposed to voice. Expired origin is still checked, not discarded.
 - Added regressions for completed and first-receipt-inflight session retirement, no-posture session changes, repeated invalidation, expired-seed review, and cancellation/timeout fault retention. No live device operations.
+
+## 2026-09-24 read-only window after native restart
+- New diagnostics available; 5 GET-only samples show current max joint tracking error 10.058 degrees, pose error about 8.645 degrees/8.518 mm, despite reported enabled/error-null and zero speech offsets. Existing preflight rejects this state.
+- Sent evidence to maintenance owner and coordinator. Kim away: no motion, torque changes, SDK writes or automatic corrections. Physical cause remains unproven; DIAGNOSIS.md records scope and evidence.
+
+## Bounded independent diagnosis delivered
+- Current logs, three paired GET samples, and native source narrow the issue without claiming a hardware root cause. Loop and feedback are active; ik_required remains true by design; neutral target follows logged desktop wake-up. Cached enabled/error-null is not verified motor readback.
+- Four offline AST/fake-controller checks pass. Added reproducible source-only checker; documented candidate falsification and minimal cached-field then motor-readback experiment in DIAGNOSIS.md. No device writes or native modifications.
+
+## Cached branch diagnostics ready for maintenance review
+- Added four attribute-only fields with explicit cached/unknown semantics, preserving schema and existing fields. No hardware getters, controller access, added tick counters, installation or process changes.
+- Focused telemetry tests: 5 passed (one existing benign dependency warning), including a controller object that raises on every access and missing fields remaining null. Native running helper is unchanged.
+
+## Cached-field independent QA correction
+- Fixed four reproduced implicit-property calls with static lookup and strict scalar type acceptance; unknown/descriptor values return null. Added independent reproductions and hostile dynamic-getter/conversion tests.
+- Visual smile-to-sound flow takes priority independently of unverified motion. No new action mapping, camera/audio access, or native deployment.

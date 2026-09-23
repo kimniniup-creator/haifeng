@@ -51,3 +51,12 @@ Read-only telemetry helper and reversible installer passed five offline tests, i
 The coordinator subsequently selected user-operated native-app close/reopen. The reviewed helper/router were staged again with a fresh ignored backup and matching SHA256; the existing backend was safely stopped without sleep, with disabled motors and error=null. Voice/video owners are paused. The user was instructed through the coordinator to close and reopen Reachy Mini Control, not press wake or motion controls. The observed native launch command includes --no-wake-up-on-start. The telemetry endpoint is pending until the user reloads the native process; do not claim it is live from staged files alone. After reload verify unique listener and GET diagnostics, then release daemon media before restoring voice, backend subscription and unique vision producer.
 
 Upper-layer posture integration explicitly retires custody on authenticated voice session change/disconnect, while same-session epochs preserve verified baseline IDs. Cross-session completed and in-flight cases are tested with the real controller/executor and a fake transport; physical motion approvals remain false.
+# 2026-09-24 offline desktop auto-wake correction
+
+Inspected official desktop 0.9.32 at f520136ffe9b54ba6e34a6d5b4da4781cfd55ab8.
+Its StartingView completion callback overrides the daemon's no-wake startup intent
+by separately issuing enable and wake. No configuration switch found. Produced
+source-only pinned patch, guarded dry-run/apply script, and 21 passing focused
+offline callback tests. Explicit click remains available; automatic completion
+cannot write. No production edit/restart or hardware access. Full build/visual QA
+and independent review remain pending; see patch README for deployment boundaries.

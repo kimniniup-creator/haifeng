@@ -3,6 +3,7 @@ import argparse
 import asyncio
 from contextlib import asynccontextmanager
 import logging
+import os
 import json
 from pathlib import Path
 import queue
@@ -16,6 +17,7 @@ import sounddevice as sd
 import uvicorn
 
 from pet_audio import KINDS, RATE, TurnGate, mechanical_voice
+from proactive_audio import ProactiveAudio
 from voice_runtime import acquire_single_instance
 
 log = logging.getLogger("jiujiu")
@@ -36,19 +38,22 @@ def find_devices():
 
 
 class Companion:
-    def __init__(self, models):
+    def __init__(self, models, proactive_token=None):
         self.models = Path(models)
         self.gate = TurnGate()
         self.capture = queue.Queue(maxsize=8)
         self.jobs = asyncio.Queue(maxsize=1)
         self.clients = set()
         self.agent_clients = set()
+        self.proactive_clients = {}
         self.tasks = []
         self.state = {"display_name": "啾啾", "mode": "mechanical_only", "phase": "starting",
                       "asr": "SenseVoice · 本地中文", "wake_word": None, "text": "",
                       "input_level": 0, "capture_frames": 0, "dropped_frames": 0,
                       "asr_ms": None, "response_ms": None, "error": None,
                       "semantic_agent_connected": False}
+        self.proactive = ProactiveAudio(self, os.environ.get("HAIFENG_PROACTIVE_TOKEN", "") if proactive_token is None else proactive_token)
+        self.last_activity = time.monotonic()
         self.last_capture = 0.0
         self.speech = False
         self.turn = None
@@ -73,6 +78,10 @@ class Companion:
 
     def input_callback(self, data, frames, timing, status):
         self.last_capture = time.monotonic()
+        rms = float(np.sqrt(np.mean(data*data)))
+        if rms >= .008:
+            with self.gate.lock:
+                self.last_activity = self.last_capture
         self.state["capture_frames"] += 1
         self.state["input_level"] = round(min(1.0, float(np.sqrt(np.mean(data*data))) * 8), 3)
         if status:
@@ -120,12 +129,18 @@ class Companion:
         self.input_stream = self.output_stream = None
 
     def forget_client(self, client):
+        connection_id = self.proactive_clients.pop(client, None)
+        if connection_id is not None: self.proactive.disconnect(connection_id)
         self.clients.discard(client)
         self.agent_clients.discard(client)
         self.state["semantic_agent_connected"] = bool(self.agent_clients)
 
     async def emit(self, event):
-        for client in list(self.clients):
+        recipients = set(self.clients)
+        if event.get("type") == "output_status" and event.get("response_id", "").startswith("visual:"):
+            event = {**event, "event_id": event["response_id"][7:]}
+            recipients.update(c for c, lease in self.proactive_clients.items() if self.proactive.alive(lease))
+        for client in list(recipients):
             try: await asyncio.wait_for(client.send_json(event), .1)
             except Exception:
                 self.forget_client(client)
@@ -293,6 +308,34 @@ def create_app(pet):
             identity = pet.interrupt("audition")
             accepted = pet.gate.enqueue(identity, "audition:" + identity["input_id"], mechanical_voice(kind), time.monotonic()+1)
         return {"accepted": accepted, **identity}
+
+    @app.post("/api/proactive-sound")
+    async def proactive_sound(request: Request):
+        if not pet.proactive.authorized(request.headers.get("authorization")):
+            raise HTTPException(403, "proactive audio disabled or unauthorized")
+        body = await request.json()
+        if not isinstance(body, dict): raise HTTPException(400, "object required")
+        return pet.proactive.submit(body)
+
+    @app.websocket("/proactive-events")
+    async def proactive_events(ws: WebSocket):
+        if ws.headers.get("origin") is not None or not pet.proactive.authorized(ws.headers.get("authorization")):
+            await ws.close(code=1008); return
+        await ws.accept()
+        lease = pet.proactive.connect()
+        pet.proactive_clients[ws] = lease["connection_id"]
+        try:
+            await ws.send_json(lease)
+            while True:
+                message = await asyncio.wait_for(ws.receive_json(), 1.5)
+                if message != {"type":"heartbeat", "connection_id":lease["connection_id"]} or not pet.proactive.heartbeat(lease['connection_id']):
+                    break
+                await ws.send_json({"type":"heartbeat", **pet.gate.identity()})
+        except (WebSocketDisconnect, asyncio.TimeoutError, ValueError): pass
+        finally:
+            pet.forget_client(ws)
+            try: await ws.close()
+            except Exception: pass
 
     @app.post("/api/agent-result")
     async def agent_result(request: Request):

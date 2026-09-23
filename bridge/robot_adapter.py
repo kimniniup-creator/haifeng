@@ -10,8 +10,11 @@ from websockets.asyncio.client import connect
 
 
 class RobotAdapter:
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, *, output_enabled: bool = False):
         self.base_url = base_url.rstrip('/')
+        # Legacy outputs bypass the pet executor. Opt-in is constructor-only;
+        # TTS_ENABLED cannot implicitly enable motion or hardware audio.
+        self.output_enabled = output_enabled is True
         self.move_id = None
         self.speech_process = None
 
@@ -28,7 +31,8 @@ class RobotAdapter:
             audio = await asyncio.to_thread(self.audio_device)
         except Exception:
             audio = None
-        result = {'connected': False, 'audio_available': audio is not None,
+        result = {'connected': False, 'hardware_output_enabled': self.output_enabled,
+                  'audio_available': audio is not None,
                   'audio_device': audio[1]['name'] if audio else None, 'audio_verified': False}
         try:
             async with httpx.AsyncClient(timeout=3, trust_env=False) as client:
@@ -44,6 +48,8 @@ class RobotAdapter:
         return result
 
     async def _move(self, antennas):
+        if not self.output_enabled:
+            raise RuntimeError('LEGACY_ROBOT_OUTPUT_DISABLED')
         ws_url = self.base_url.replace('http://', 'ws://').replace('https://', 'wss://') + '/api/move/ws/updates'
         async with connect(ws_url, open_timeout=3, proxy=None) as socket:
             async with httpx.AsyncClient(timeout=5, trust_env=False) as client:
@@ -63,6 +69,8 @@ class RobotAdapter:
                         raise RuntimeError('ROBOT_MOTION_FAILED')
 
     async def acknowledge(self) -> dict:
+        if not self.output_enabled:
+            return {'motion_status': 'disabled', 'audio_status': 'not_requested'}
         status = await self.status()
         if not status['connected']:
             return {'motion_status': 'failed', 'audio_status': 'not_requested', 'error_code': status.get('error_code')}
@@ -78,6 +86,8 @@ class RobotAdapter:
             return {'motion_status': 'failed', 'audio_status': 'not_requested', 'error_code': 'ROBOT_MOTION_FAILED'}
 
     async def speak(self, text: str) -> dict:
+        if not self.output_enabled:
+            return {'audio_status': 'disabled'}
         if os.name != 'nt':
             return {'audio_status': 'failed', 'error_code': 'WINDOWS_TTS_REQUIRED'}
         device = await asyncio.to_thread(self.audio_device)
@@ -123,6 +133,8 @@ class RobotAdapter:
                 return {'audio_status': 'failed', 'error_code': 'ROBOT_AUDIO_FAILED'}
 
     async def respond(self, text: str) -> dict:
+        if not self.output_enabled:
+            return {'motion_status': 'disabled', 'audio_status': 'disabled'}
         result = await self.acknowledge()
         if os.getenv('TTS_ENABLED', 'true').lower() in {'0', 'false', 'off'}:
             result['audio_status'] = 'disabled'
@@ -131,6 +143,10 @@ class RobotAdapter:
         return result
 
     async def stop(self):
+        if not self.output_enabled:
+            # In disabled mode this adapter owns no output. In particular do not
+            # stop another service's sounddevice stream during cancellation.
+            return
         import sounddevice as sd
         sd.stop()
         process = self.speech_process

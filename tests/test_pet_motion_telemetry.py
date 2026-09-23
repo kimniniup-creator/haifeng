@@ -44,3 +44,29 @@ def test_route_exposes_all_fields_without_fullstate_filter():
 def test_nonfinite_rejected():
     with pytest.raises(ValueError):
         plain(np.array([float("nan")]))
+
+
+def test_cached_dispatch_gates_do_not_infer_physical_torque():
+    b = backend()
+    b._torque_enabled = False
+    b._current_head_operation_mode = 0
+    b._current_antennas_operation_mode = 3
+    b.last_alive = 1234.5
+    # No hardware/controller method should be consulted.
+    class ForbiddenController:
+        def __getattribute__(self, name):
+            raise AssertionError('controller accessed: '+name)
+    b.c = ForbiddenController()
+    result = snapshot(b)
+    assert result['control_mode'] == 'enabled'
+    assert result['torque_enabled_cached'] is False
+    assert result['head_operation_mode_cached'] == 0
+    assert result['antennas_operation_mode_cached'] == 3
+    assert result['last_alive_unix'] == 1234.5
+
+
+def test_missing_dispatch_fields_are_unknown_not_disabled():
+    result = snapshot(backend())
+    for name in ('torque_enabled_cached', 'head_operation_mode_cached',
+                 'antennas_operation_mode_cached', 'last_alive_unix'):
+        assert result[name] is None

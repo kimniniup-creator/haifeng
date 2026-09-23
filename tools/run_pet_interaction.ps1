@@ -3,6 +3,7 @@ param(
     [int]$Port = 8091,
     [switch]$EnableDevices,
     [switch]$EnableMotion,
+    [switch]$EnableVisualSounds,
     [string]$VoiceUrl = ''
 )
 $ErrorActionPreference = 'Stop'
@@ -13,6 +14,7 @@ if (-not (Test-Path -LiteralPath $Python)) {
 }
 if ($EnableMotion -and -not $EnableDevices) { throw '-EnableMotion requires -EnableDevices' }
 if ($VoiceUrl -and -not $EnableDevices) { throw '-VoiceUrl requires -EnableDevices' }
+if ($EnableVisualSounds -and (-not $EnableDevices -or -not $VoiceUrl -or $env:HAIFENG_PROACTIVE_TOKEN.Length -lt 24)) { throw '-EnableVisualSounds requires -EnableDevices, -VoiceUrl and a locally configured HAIFENG_PROACTIVE_TOKEN' }
 $petRuntime = Join-Path $petRoot '.runtime'
 New-Item -ItemType Directory -Path $petRuntime -Force | Out-Null
 $petTokenFile = Join-Path $petRuntime 'pet-local-tokens.json'
@@ -30,6 +32,7 @@ try {
     $petArguments = @('-m', 'pet_interaction', '--port', "$Port")
     if ($EnableDevices) { $petArguments += '--enable-devices' }
     if ($EnableMotion) { $petArguments += '--enable-motion' }
+    if ($EnableVisualSounds) { $petArguments += '--enable-visual-sounds' }
     if ($VoiceUrl) { $petArguments += @('--voice-url', $VoiceUrl) }
     Push-Location -LiteralPath $petRoot
     try { & $Python @petArguments } finally { Pop-Location }
