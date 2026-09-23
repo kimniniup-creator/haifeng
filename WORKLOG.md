@@ -119,3 +119,8 @@
 - 固定 7db4d40：51 项仓库测试、8 项 QA 增量全部通过，无跳过；精确 TTL 边界修复已包含。
 - 比较到 PR11 624ec3b：笑脸/Agent/声音主线代码无变化。证据与复现步骤见 docs/VISUAL_SOUND_QA_RESULTS.md，QA 测试保存在 qa/visual_sound。
 - 未触及生产服务或硬件；现场真人识别和实际听感仍待验收。
+
+## 2026-09-24 GENKI 静态评估独立复核
+- 固定ba1dd0e，指标测试1pass；256条已有元数据独立聚合匹配报告，unknown113保留分母。
+- 未下载原图或重跑推理；发现原运行JSON缺最终脚本新增detector_source_sha256，明确记录证据边界并通知视觉owner。
+- 详见docs/GENKI_EVALUATION_QA.md；PR11不等待此文档。
