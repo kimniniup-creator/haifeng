@@ -12,6 +12,29 @@ from pet_vision import GestureEngine, Observation
 from pet_vision.synthetic import open_hand
 
 
+def test_explicit_look_up_uses_real_executor_without_fabricating_baseline():
+    async def scenario():
+        pet = PetController(motion=MotionExecutor())
+        await pet.voice_turn("look-session", 1, 1)
+        packet = {"schema_version": 1, "source": "voice", "session_id": "look-session",
+                  "event_id": "look-event", "kind": "speech_final", "observed_at": time.time(),
+                  "ttl_seconds": 5, "confidence": 1, "epoch": 1, "turn_id": 1,
+                  "input_id": "look-input", "payload": {"text": "啾啾抬头"}}
+        receipt = await pet.handle(packet)
+        await pet.drain()
+        result = pet.decisions[receipt["decision_id"]]
+        assert result["semantic_id"] == "look_up"
+        assert result["motion"]["status"] == "dry_run"
+        assert result["motion"]["baseline_id"] is None
+        assert pet.motion_baseline is None
+        await pet.voice_turn("look-session", 2, 2)
+        packet.update(event_id="return-event", epoch=2, turn_id=2, input_id="return-input",
+                      observed_at=time.time(), payload={"text": "回到抬头前的位置"})
+        assert (await pet.handle(packet))["reason"] == "no_valid_motion_baseline"
+        await pet.close()
+    asyncio.run(scenario())
+
+
 def test_real_gesture_engine_to_real_dryrun_motion_adapter():
     async def scenario():
         now=[time.time()]
