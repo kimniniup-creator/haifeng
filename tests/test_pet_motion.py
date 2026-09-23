@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 import unittest
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -132,6 +133,25 @@ class MotionTests(unittest.IsolatedAsyncioTestCase):
         await self.executor.wait(first.request_id)
         self.assertEqual((await self.executor.wait(second.request_id)).status, "expired")
         self.assertEqual(len(self.daemon.starts), 1)
+
+    async def test_start_deadline_cannot_be_extended_by_execution_budget(self):
+        first = await self.running()
+        second = await self.executor.submit("attention", "voice:a:1", 10,
+                                            start_deadline=time.time()+.02,
+                                            execution_budget_seconds=10)
+        await asyncio.sleep(.05)
+        await self.daemon.events.put((self.daemon.starts[0][0], "move_completed"))
+        await self.executor.wait(first.request_id)
+        self.assertEqual((await self.executor.wait(second.request_id)).status, "expired")
+        self.assertEqual(len(self.daemon.starts), 1)
+
+    async def test_invalid_budget_and_expired_absolute_deadline_rejected(self):
+        for budget in (0, -1, 31, float("nan")):
+            result = await self.executor.submit("attention", "voice:a:1", 10, execution_budget_seconds=budget)
+            self.assertEqual(result.reason, "invalid_execution_budget")
+        result = await self.executor.submit("attention", "voice:a:1", 10,
+                                            start_deadline=time.time()-1, execution_budget_seconds=10)
+        self.assertEqual(result.reason, "expired")
 
     async def test_active_ttl_stops_uuid(self):
         result = await self.submit(ttl_seconds=.3)
