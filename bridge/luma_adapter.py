@@ -10,7 +10,7 @@ class LumaUnavailable(RuntimeError):
 
 
 class LumaAdapter:
-    def __init__(self, mode: str, cli_path: str, timeout_seconds: float = 15):
+    def __init__(self, mode: str, cli_path: str, timeout_seconds: float = 40):
         self.mode = mode
         self.cli_path = cli_path
         self.timeout_seconds = timeout_seconds

@@ -3,3 +3,9 @@ httpx==0.28.1
 pillow==11.1.0
 python-multipart==0.0.20
 uvicorn[standard]==0.34.0
+python-dotenv==1.2.3
+bleak==3.0.2
+sounddevice==0.5.6
+soundfile==0.14.0
+numpy==2.5.3
+websockets==17.1

@@ -12,6 +12,9 @@
   function errorCodeText(code) {
     if (code.includes('BRIDGE_TOKEN_NOT_CONFIGURED')) return '本机服务尚未准备好连接令牌。请在设置中填写。';
     if (code.includes('UNAUTHORIZED')) return '本机连接令牌不正确。请在设置中更新。';
+    if (code.includes('IMAGE_TOO_LARGE')) return '照片超过 10 MB，请换一张小一些的图片。';
+    if (code.includes('IMAGE_INVALID') || code.includes('IMAGE_FORMAT_UNSUPPORTED')) return '请使用可打开的 JPG 或 PNG 照片。';
+    if (code.includes('LUMA_NOT_CONFIGURED')) return '眼镜连接还未配置。你可以先上传照片。';
     if (code.includes('LUMA_CAPTURE_FAILED')) return '眼镜没有拍到照片。请确认眼镜已连接后再试。';
     if (code.includes('LUMA_CAPTURE_TIMEOUT')) return '等待眼镜照片超时。照片没有被保存。';
     if (code.includes('MODEL_NOT_CONFIGURED')) return '还没有配置支持图片的模型。照片已经保留，可以先去设置完成配置。';
@@ -32,7 +35,7 @@
 
   function setBusy(value, message = '') {
     state.busy = value;
-    ['send', 'capture', 'new-session', 'clear-image', 'photo-input'].forEach((id) => { $(id).disabled = value; });
+    ['send', 'capture', 'new-session', 'clear-image', 'photo-input', 'rename-open', 'delete-open', 'settings-open'].forEach((id) => { $(id).disabled = value; });
     document.querySelectorAll('.session-item').forEach((button) => { button.disabled = value; });
     document.querySelector('.photo-actions').classList.toggle('is-disabled', value);
     hide($('stop'), !value);
@@ -76,10 +79,10 @@
       button.append(name, date); button.addEventListener('click', () => openSession(session.session_id)); list.append(button);
     });
   }
-  async function loadSessions() { try { const data = await api('/v1/sessions'); renderSessions(data.sessions || data); } catch (_) { renderSessions([]); } }
+  async function loadSessions() { ['rename-open', 'delete-open'].forEach(id => { $(id).disabled = !state.sessionId || state.busy; }); try { const data = await api('/v1/sessions'); renderSessions(data.sessions || data); } catch (_) { renderSessions([]); } }
 
   function sourceTime(image) {
-    const source = image.source === 'manual_upload' ? '电脑' : '眼镜';
+    const source = image.source === 'manual_upload' ? '本地照片' : '眼镜';
     return `${source} · ${image.captured_at ? new Date(image.captured_at).toLocaleString('zh-CN') : '刚刚'}`;
   }
   async function openSession(id) {
@@ -93,7 +96,10 @@
     } catch (error) { setText($('request-state'), errorText(error)); }
   }
   async function createSession() {
+    if (state.busy) return;
+    setBusy(true, '正在新建片段…');
     try { const data = await api('/v1/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); state.sessionId = data.session_id; state.requestId = null; $('message-list').replaceChildren(); setImage(null); $('message-input').value = ''; setText($('request-state'), ''); $('session-name').value = ''; await loadSessions(); $('message-input').focus(); } catch (error) { setText($('request-state'), errorText(error)); }
+    finally { setBusy(false, $('request-state').textContent); }
   }
 
   function statusLine(data) {
@@ -116,12 +122,14 @@
     finally { setBusy(false, $('request-state').textContent); }
   }
 
-  async function poll(requestId) {
+  async function poll(requestId, onUpdate = () => {}) {
     state.requestId = requestId;
     for (let count = 0; count < 180; count += 1) {
       const result = await api(`/v1/requests/${encodeURIComponent(requestId)}`);
+      onUpdate(result);
       if (result.status === 'capturing') setText($('photo-progress-text'), '眼镜正在拍下眼前这一刻…');
       if (result.status === 'thinking') setText($('request-state'), '海风正在看，也在读你的文字…');
+      if (result.status === 'responding') setText($('request-state'), '文字已保存，正在送到 Reachy…');
       if (!working.has(result.status)) return result;
       await new Promise((resolve) => setTimeout(resolve, 650));
     }
@@ -129,9 +137,9 @@
   }
   function robotResult(result) {
     const robot = result.robot || result; const statuses = [];
-    if (robot.motion_status) statuses.push(robot.motion_status === 'completed' ? '动作已完成' : `动作未完成（${robot.motion_status}）`);
-    if (robot.audio_status) statuses.push(robot.audio_status === 'played_unverified' ? '已送到 Reachy 音频设备，现场声音待确认' : robot.audio_status === 'completed' ? '已请求 Reachy 播报' : `播报未完成（${robot.audio_status}）`);
-    if (robot.audio_verified === false) statuses.push('未验证真实可闻');
+    if (robot.motion_status) statuses.push(robot.motion_status === 'completed' ? '动作已完成' : 'Reachy 动作未完成，请检查独立电源');
+    if (robot.audio_status) statuses.push(robot.audio_status === 'played_unverified' ? '已送到 Reachy 音频设备，现场声音待确认' : robot.audio_status === 'completed' ? '已请求 Reachy 播报' : (robot.audio_status === 'disabled' ? '本次未启用播报' : 'Reachy 播报未完成'));
+    if (robot.audio_verified === false && robot.audio_status !== 'played_unverified') statuses.push('现场声音待确认');
     return statuses.length ? `已保存。${statuses.join('；')}。` : '已保存。';
   }
   function requireSuccess(result) { if (!successful.has(result.status)) throw new Error(result.error_code || result.status || 'REQUEST_FAILED'); }
@@ -144,9 +152,9 @@
   }
   async function send(event) {
     event.preventDefault(); const input = $('message-input'); const value = input.value.trim(); if (!value || state.busy) return; if (!state.sessionId) await createSession(); if (!state.sessionId) return;
-    setBusy(true, '海风正在读…'); let optimistic = null;
-    try { const queued = await api('/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: state.sessionId, client_request_id: `message_${Date.now()}`, text: value, image_id: state.imageId }) }); optimistic = appendMessage('user', value); const result = await poll(queued.request_id); requireSuccess(result); input.value = ''; if (result.answer_text) appendMessage('assistant', result.answer_text); setText($('request-state'), robotResult(result)); await loadSessions(); }
-    catch (error) { if (optimistic) optimistic.remove(); setText($('request-state'), errorText(error)); }
+    setBusy(true, '海风正在读…'); input.value = value; let optimistic = null; let answerShown = false;
+    try { const queued = await api('/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: state.sessionId, client_request_id: `message_${Date.now()}`, text: value, image_id: state.imageId }) }); optimistic = appendMessage('user', value); const result = await poll(queued.request_id, (update) => { if (update.answer_text && !answerShown) { appendMessage('assistant', update.answer_text); answerShown = true; input.value = ''; } }); requireSuccess(result); input.value = ''; if (result.answer_text && !answerShown) appendMessage('assistant', result.answer_text); setText($('request-state'), robotResult(result)); await loadSessions(); }
+    catch (error) { if (!answerShown) { if (optimistic) optimistic.remove(); input.value = value; } setText($('request-state'), (answerShown ? '文字已保存。' : '') + errorText(error)); }
     finally { state.requestId = null; setBusy(false, $('request-state').textContent); }
   }
   async function stop() { const id = state.requestId; if (!id) return; try { await api(`/v1/requests/${encodeURIComponent(id)}/cancel`, { method: 'POST' }); setText($('request-state'), '正在停止这次操作…'); } catch (error) { setText($('request-state'), errorText(error)); } }

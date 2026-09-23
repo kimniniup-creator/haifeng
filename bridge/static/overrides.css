@@ -4,6 +4,14 @@
 .danger-fill { background: #8d4933; border-color: #8d4933; }
 .photo-actions.is-disabled { opacity: .45; pointer-events: none; }
 .privacy-note { margin: 0 0 9px; color: var(--muted); font-size: 12px; }
+.composer-bottom { flex-wrap: wrap; }
+.request-state { flex: 1 1 100%; overflow-wrap: anywhere; }
+.composer-actions { flex: 0 0 auto; margin-left: auto; }
+.composer-actions button { white-space: nowrap; min-width: 96px; }
+.conversation-heading { flex-wrap: wrap; }
+.reuse-note { white-space: nowrap; }
+.icon-button { min-width: 44px; min-height: 44px; }
+button:focus-visible, label[for="photo-input"]:focus-visible, textarea:focus-visible { outline: 2px solid var(--ochre); outline-offset: 3px; }
 @media (min-width: 1000px) {
   .workspace { display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(320px, .82fr); column-gap: 38px; align-content: start; max-width: 1260px; }
   .topline { grid-column: 1 / -1; }

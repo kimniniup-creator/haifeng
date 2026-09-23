@@ -1,102 +1,59 @@
-# Robot Glasses Bridge V2
+# 海风
 
-Robot Glasses Bridge connects Luma-compatible smart glasses, a Reachy Mini robot, and an
-OpenAI-compatible vision model through one local FastAPI service.
+把今天的一小片，带回来。
 
-Version 2 adds verified Windows support for E06/S3 glasses whose firmware exposes the Luma
-`AA12` GATT service after connection but does not include that service in BLE advertisements.
-The bridge can select a specific device by Bluetooth name or address, capture the small AI JPEG
-over BLE, and pass it into the existing vision and robot workflow.
+海风是一个本机运行的照片回顾应用：放一张照片、写一句话，Reachy 围绕照片回应，再把这个片段留下来。第一版输入为文字；图片可上传，也可通过电脑附近的 Luma 兼容眼镜主动拍摄。
 
-## Verified hardware
+**当前状态：软件首版可运行，完整硬件验收尚未完成。** 真实视觉模型已验证；音频已送达 Reachy USB 输出设备，现场可闻性待确认。当前机器人电机未检测到，眼镜未被本机扫描发现。详见 [验收记录](docs/ACCEPTANCE.md)。
 
-- Glasses name: `E06-0055`
-- Project: `S3`
-- Hardware revision: `2`
-- Bluetooth firmware: `1.4.9`
-- ISP firmware: `1.3.5`
-- BLE photo: verified, `368 x 480` JPEG
+## 在这台电脑打开
 
-The individual device address is intentionally not stored in this public repository. Configure
-your own name or address in `.env`.
-
-## Requirements
-
-- Windows 11 with Bluetooth LE
-- Python 3.12
-- Rust stable with the MSVC toolchain
-- Git with submodule support
-- A powered and awake E06/E09-compatible pair of glasses
-
-## Setup
-
-Clone the repository with its submodules:
+双击 `D:\海风\start.cmd`，或运行：
 
 ```powershell
-git clone --recurse-submodules https://github.com/timesbye/Robot_glasses.git
-Set-Location Robot_glasses
-Copy-Item .env.example .env
+Set-Location D:\海风
+.\start.ps1
 ```
 
-Set at least the bridge token and the glasses selector in `.env`:
+浏览器访问 http://127.0.0.1:8088 。页面设置里可更换实际模型服务。页面中的“新的片段”新建记录，照片和对话自动保存在本机；可命名、回看、删除。停止会取消当前任务。
 
-```dotenv
-BRIDGE_TOKEN=replace-with-a-random-local-token
-LUMA_DEVICE=E06-0055
-```
+## 从 GitHub 恢复
 
-`LUMA_DEVICE` accepts the advertised Bluetooth name or a stable device address. An address is
-more reliable when the device advertises only briefly. Keep `.env` local; it is ignored by Git.
-
-Build the patched Luma client and start the bridge:
+需要 Windows、Python 3.12（推荐 uv）、Git。克隆本仓库到新的空目录，运行 `start.ps1` 会创建桥接环境并安装固定的直接依赖。Python BLE 路径不要求 Rust 或初始化上游子模块。
 
 ```powershell
-.\build_luma.ps1
-.\run_bridge.ps1
+git clone https://github.com/kimniniup-creator/haifeng.git
+Set-Location haifeng
+.\start.ps1
 ```
 
-The first `run_bridge.ps1` invocation also builds the client automatically when it is absent.
-Open `http://127.0.0.1:8088/` after the service starts.
+首次在页面设置里填写支持图像的 OpenAI-compatible 模型地址、模型名和密钥。本机首次启动自动生成随机连接令牌，仅回环地址页面可领取；模型密钥不会返回浏览器。
 
-## Configuration
+运行 `start_robot.ps1` 安装/启动独立的 Reachy SDK 1.11.0 环境。机器人须连接独立电源和 USB；不要同时启动另一份桌面程序的 Daemon。脚本不会自动唤醒头部，应用只请求小幅触角动作。
 
-| Variable | Purpose | Default |
-|---|---|---|
-| `BRIDGE_HOST` | HTTP listen address | `127.0.0.1` |
-| `BRIDGE_PORT` | HTTP listen port | `8088` |
-| `BRIDGE_TOKEN` | Bearer token used by the API and UI | local development token |
-| `LUMA_DEVICE` | Glasses Bluetooth name or address | automatic `AA12` scan |
-| `LUMA_CLI_PATH` | Path to the compiled Luma CLI | repository release build |
-| `REACHY_HOST` | Reachy daemon host | `127.0.0.1` |
-| `REACHY_PORT` | Reachy daemon port | `8000` |
-| `MODEL_BASE_URL` | OpenAI-compatible API base URL | unset |
-| `MODEL_API_KEY` | Model API key | unset |
-| `VISION_MODEL` | Vision-capable model name | unset |
+## 配置与隐私
 
-Environment variables already present in the shell take precedence over `.env` values.
+可参考 `.env.example` 建立本机 `.env`。`LUMA_MODE=python` 使用 Bleak，`LUMA_DEVICE` 可填设备广播名称或地址；不填写时仅在唯一候选设备存在时连接。`TTS_ENABLED=true` 使用 Windows 本地中文语音合成，输出明确绑定 Reachy 音频设备；失败不会静默改用电脑扬声器。
 
-## Hardware smoke test
+页面设置更改的模型配置保存在 `data/settings.json`，优先于旧环境配置。图片和对话保留在 `data/`，直到主动删除片段。发送文字/图片时内容会交给配置的模型服务；本地存储不代表离线推理。不要提交 `.env`、`data/` 或运行日志。
 
-Wake the glasses and ensure a phone application is not holding the BLE connection, then run:
+默认只监听本机。手机响应式布局已测试；手机实体局域网访问尚未验收。不要把 Reachy 8000 控制端口暴露公网。本版不是多用户云服务。
+
+## 开发与验证
 
 ```powershell
-$env:LUMA_DEVICE = 'E06-0055'
-.\upstream\luma-core\target\release\examples\luma.exe info
-.\upstream\luma-core\target\release\examples\luma.exe photo --ai .\data\smoke-test.jpg
+uv pip install --python .venv\Scripts\python.exe -r requirements-dev.txt
+.venv\Scripts\python.exe -m pytest -q
+.venv\Scripts\python.exe -m bridge.luma_ble scan
 ```
 
-`info` should report firmware, battery, volume, settings, and `handshake complete: true`.
+19 项自动测试包含 20 轮模拟队列测试；模拟不代表硬件联调成功。运行日志在 `.runtime/`。用户界面在 `bridge/static/`，桥接服务为 FastAPI/SQLite。
 
-## Validation
+## 项目依据
 
-The V2 hardware run completed a full handshake and received a valid JPEG from the glasses.
-The Luma library test suite also passes with the compatibility patch:
+继承 [timesbye/Robot_glasses](https://github.com/timesbye/Robot_glasses) V2（E06兼容修复），保留上游 Git 历史和 Rust 可选构建路径。上游记录的 E06/S3 拍照成功属于另一环境，本机不沿用其验收结论。Python协议后备实现依据固定的 [luma-core](https://github.com/metastable-lab/luma-core) MIT 源码；Reachy接口按本机1.11.0 OpenAPI检查。
 
-```powershell
-cargo test --locked --release --lib --features ble --manifest-path .\upstream\luma-core\Cargo.toml -j 1
-```
-
-Result: `198 passed; 0 failed`.
-
-See [CHANGELOG.md](CHANGELOG.md) for release notes and
-[Luma_Reachy_部署交互指南.md](Luma_Reachy_部署交互指南.md) for the broader deployment design.
+- [产品方向与取舍](docs/PRODUCT.md)
+- [验收与真实限制](docs/ACCEPTANCE.md)
+- [工作日志](WORKLOG.md)
+- [接手说明](HANDOFF.md)
