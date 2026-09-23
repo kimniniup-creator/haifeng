@@ -1,5 +1,36 @@
 # Single-candidate physical acceptance plan (not executed)
 
+## Updated first probe: measured head micro nod
+
+The coordinator rejected attentive1/simple_nod as default basic-interaction
+candidates because of their static amplitude. Their evidence below is retained
+for comparison, but the recorded playback plan is superseded for the first probe.
+
+The new first probe is `attention` using `head_micro_nod`: 1.5 degrees local Y
+relative to the measured head matrix, minjerk at least 1.5 seconds outward and
+1.5 seconds back, no sound. Preserve measured translation/antennas/body yaw.
+Observe whether the sign reads naturally as a nod; do not label it a verified
+downward nod before visual review. No fixed Euler zero or factory neutral is used.
+
+Before the probe, use the coordinator-granted window and preflight conditions
+below. Construct a fresh executor with a temporary isolated profile/mapping
+approval for **attention only**, dry_run=False, and a unique probe turn/request ID.
+Use 10 s TTL and default 20 s execution timeout. Do not persist production
+approved=true before physical acceptance. Submit exactly once, record both UUIDs
+from result updates/event trace, before/peak/after measured poses and observed
+motion. The adapter requires each measured target, including exact origin return,
+to satisfy 0.005 rad head/body, 1 mm translation and 0.01 rad antenna tolerances.
+Report actual measured errors, observed motion and event timing together.
+
+The first result must show a visible small motion, stable unaffected joints, no
+unexpected sound and a confirmed return. If it fails, stop, preserve evidence,
+and investigate; never amplify or retry automatically. A separate subsequent
+window tests interruption of the same profile: stop-by-current-UUID followed by
+a measured-pose hold, no return leg. A successful stop is not return-to-origin.
+Only after review of these observations should the owner approve the profile and
+chosen semantic mappings for the integrated backend. This is the concrete path
+from dry-run to live use, not a claim that fake tests authorize hardware.
+
 2026-09-23: read-only inspection of native cached assets and installed guard.
 The coordinator owns the device window; voice must hand it back before any step
 below sends motion. Integration owner keeps the default dry-run gates unchanged.

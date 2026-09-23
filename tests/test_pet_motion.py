@@ -61,6 +61,9 @@ class MotionTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.daemon = FakeDaemon()
         self.executor = MotionExecutor(self.daemon, dry_run=False, stop_timeout=.05)
+        # Keep the recorded transport cases independent of the default semantic
+        # choice; micro motion has its own measured-device fixture.
+        self.executor.mappings["attention"] = {"dataset": "pollen-robotics/reachy-mini-emotions-library", "action_id": "attentive1", "approved": True}
         # Test-only approval: production defaults remain unapproved.
         for mapping in self.executor.mappings.values():
             mapping["approved"] = True
@@ -278,7 +281,7 @@ class MotionTests(unittest.IsolatedAsyncioTestCase):
         catalog = json.loads((Path(__file__).parents[1] / "docs/reachy-mapping/actions.json").read_text(encoding="utf-8"))
         available = {a["key"] for a in catalog["actions"] if a["listed"]}
         for mapping in self.executor.mappings.values():
-            if mapping["action_id"]:
+            if mapping.get("action_id"):
                 self.assertIn(mapping["dataset"] + "/" + mapping["action_id"], available)
 
 
