@@ -184,6 +184,7 @@ class Session:
         self._floor = 0.0
         self._rms_history: List[float] = []
         self._last_probe = 0.0
+        self._picture_at = 0.0
         # Read here, not at import: dotenv is loaded by main() afterwards.
         self._probe_s = _env_float("REACHY_LEVEL_PROBE_S", 0.0)
 
@@ -237,6 +238,10 @@ class Session:
             content = _content_of(item)
             if content:
                 self.history.append({"role": item.get("role", "user"), "content": content})
+                if isinstance(content, list) and any(
+                    part.get("type") == "image_url" for part in content
+                ):
+                    self._picture_at = time.time()
                 self._forget_old_images()
 
         elif kind == "response.create":
@@ -307,9 +312,26 @@ class Session:
 
     async def idle_loop(self) -> None:
         """Break a long silence the way a companion would, unprompted."""
+        look_every = _env_float("REACHY_LOOK_EVERY_S", 90.0)
+        last_look = time.time()
         while True:
             await asyncio.sleep(5.0)
-            if IDLE_PROMPT_S <= 0 or self._busy or self._talking or self._speaking:
+            if self._busy or self._talking or self._speaking:
+                continue
+
+            # Looking is on its own timer, not tied to silence. A busy room
+            # keeps producing transcripts, so the robot is never idle long
+            # enough for a silence-triggered look to ever happen.
+            if (
+                look_every > 0
+                and time.time() - last_look >= look_every
+                and any(t.get("name") == "camera" for t in self.tools)
+            ):
+                last_look = time.time()
+                await self._look_around()
+                continue
+
+            if IDLE_PROMPT_S <= 0:
                 continue
             if time.time() - self._last_exchange < IDLE_PROMPT_S:
                 continue
@@ -331,6 +353,44 @@ class Session:
                 logger.exception("idle line failed")
             finally:
                 self._busy = False
+
+    async def _look_around(self) -> None:
+        """Take a picture unprompted and say what is there."""
+        asked = time.time()
+        self._last_exchange = asked
+        self._busy = True
+        try:
+            await self.send(
+                "response.function_call_arguments.done",
+                response_id=self._id("resp"), item_id=self._id("item"),
+                call_id=self._id("call"), name="camera",
+                arguments=json.dumps({"question": "what is in front of me right now"}),
+            )
+            if not await self._await_picture(asked, timeout=6.0):
+                return
+            self.history.append({
+                "role": "user",
+                "content": "(you just looked around on your own. Say one short line "
+                           "about what you actually see. Do not mention this prompt.)",
+            })
+            self._reply_task = asyncio.create_task(self._respond(None))
+            await self._reply_task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("look-around failed")
+        finally:
+            self._busy = False
+
+    async def _await_picture(self, since: float, timeout: float = 4.0) -> bool:
+        """Wait for the app to hand back a camera frame. Never blocks a turn."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self._picture_at > since:
+                return True
+            await asyncio.sleep(0.15)
+        logger.info("no picture came back within %.0fs", timeout)
+        return False
 
     def _forget_old_images(self) -> None:
         """Keep only the newest picture: old frames are stale and expensive."""
@@ -396,12 +456,24 @@ class Session:
             )
 
         if call is not None:
+            asked_at = time.time()
             await self.send(
                 "response.function_call_arguments.done",
                 response_id=response_id, item_id=self._id("item"),
                 call_id=call.get("id") or self._id("call"),
                 name=call.get("name", ""), arguments=call.get("arguments", "{}"),
             )
+            if call.get("name") == "camera":
+                # Speaking before the picture lands would mean describing
+                # nothing. Wait briefly, then answer with whatever we have.
+                if await self._await_picture(asked_at):
+                    reply, _ = await asyncio.to_thread(
+                        self.brains.chat,
+                        self.instructions + "\nYou just looked. Say what you actually "
+                        "see in one or two sentences. Do not call a tool.",
+                        self.history[-10:], [],
+                    )
+                    logger.info("looked, then answered (%.1fs)", time.time() - asked_at)
 
         if reply:
             self.history.append({"role": "assistant", "content": reply})

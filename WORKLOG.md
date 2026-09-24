@@ -402,3 +402,12 @@ and were deliberately not restarted here.
 - 实测分段：model 2.4–5.2s、speech 0.1–0.5s、STT 亚秒，合计约 3–6 秒。残余抖动来自中转约十分之一的挂死，非本机可控。
 - 修掉一处自己引入的作用域错误：计时日志引用的 `spoke` 定义在 `if voice is not None` 之外，导致每轮 NameError；表现为回复产生但轮次异常结束。
 - 近场门控经重调后分离清晰：房间杂音 212–856 全部 counts=False，用户声音 1142/2047/2554/3701 全部 counts=True，floor 自适应 206–399。电平探针调完后置 0 关闭。
+
+## 2026-09-24 摄像头接通与本地状态面板
+- 用户反馈摄像头"看起来开着但没反应"。查证：模型从未调用过 camera，工具调用全是 play_emotion。离线单测证明模型本身正确——问 "What do you see" / "What am I holding" / "How do I look today" 三次全部选择 camera 工具。真因有二：转写把用户指令打碎成 "Thank you"/"Okay" 等碎片，模型从未收到"看一眼"的请求；以及服务端在发出工具调用后立刻逼模型开口，照片尚未回传。
+- 修正一：调用 camera 后等待照片回传（最多 4 秒）再生成回复，超时则照常说话，绝不阻塞语音。
+- 修正二：新增 _look_around()，由服务端自行发出 camera 工具调用。最初挂在 idle 条件下，但会场噪声不断产生转写、_last_exchange 被反复刷新，30 秒安静永远等不到；改为独立定时（REACHY_LOOK_EVERY_S，默认 90，现场设 60），只要不在说话即可触发。
+- 实测通过：应用侧 camera 调用计数 1，模型回复 "I see three people leaning in around me in a dark, poster-lined space." —— 来自 Reachy 自身摄像头的真实画面。
+- **官方客户端冲突**：用户打开 Reachy Mini Control 后，它抢占 8000 端口（desktop_app_daemon=true，版本由 1.11.0 退回 1.8.0）并独占摄像头与音频设备，我方 daemon 被顶掉、对话应用刷 Lost connection、动作与摄像头全失。关闭客户端后以 start_robot_media.ps1 恢复 1.11.0 并重启对话应用即恢复。两个 daemon 不能共用同一台机器人。
+- **新增本地状态面板** tools/status_board.py（http://127.0.0.1:8770）：机器人连接/电机/控制环、摄像头媒体占用、语音服务端与对话应用在线状态、转写模型、最后听到与最后回复的时间差及原文、最近数轮耗时。用户此前无法自查任何指标，只能等我贴日志。
+- 另派子线程制作面向观众的 Reachy 日记页（端口 8800，皮克斯 + Reachy 视觉语言）。
