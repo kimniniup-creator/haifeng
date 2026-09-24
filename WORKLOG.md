@@ -325,3 +325,11 @@ and were deliberately not restarted here.
 - **实测结论（三次探测）**：0/4、0/4、1/3。唯一成功的一轮：问"蜘蛛有几条腿"，回答"Eight"，耗时 22 秒——链路本身是通的。失败集中在"完全未被转写"与"已转写但 LLM 级无回应"，与调研指出的中转 LLM 代理无读取超时一致。工具从 17 精简到 7 再恢复到 16，对成功率无改善，排除工具数量为主因。
 - 按用户决定调整：新建 user_personalities/reachy_tuned（复制 default 全文与 Aiden 音色，不改人设），加入两条约束——web_search 默认不调用（除非用户明确要求查网），以及记忆为短期不可依赖；移除 idle_do_nothing；其余工具保留。看门狗每 20 轮助手发言清空一次 memory.v1.json。
 - VAD 按"交互优先、暂不要求准确度"设为 threshold 0.2、允许打断、silence 600ms、近场倍数降至 1.8。
+
+## 2026-09-24 按用户要求只保留人机沟通组件
+- 用户指示：只执行人机沟通的组件，关闭人脸识别。
+- 处理：不是仅在人格里禁用，而是把 AUTOLOAD_EXTERNAL_TOOLS 置 0 并移除 REACHY_MINI_EXTERNAL_TOOLS_DIRECTORY，使 bio_tools 下的 face_memory 与 gesture_watch **完全不被加载**。重启后日志中两者出现次数为 0，"external tool" 相关行数为 0。人格文件 reachy_tuned 的 default_tools 同步去掉这两项，重启后不会复活。
+- 当前工具表（16 项，含框架自带的 task_status/task_cancel）：play_emotion、stop_emotion、move_head、head_tracking、camera、dance、stop_dance、sweep_look、go_to_sleep、remember、forget、search_web、get_time、get_weather。
+- 移除感知组件后重测：1/4（"What colour is the sky" → "Blue"，23 秒）。
+- **四次探测累计 0/4、0/4、1/3、1/4 ≈ 成功率 2/15**。已排除的变量：工具数量（17→7→16→14 无变化）、VAD 参数（0.85/0.6/0.2 与打断开关组合）、门控实现缺陷（已修静音连续性与大包问题）、看门狗可靠性（已修自杀）。四轮探测中成功的两轮答案均正确、耗时 22–23 秒，证明链路本身正确，瓶颈在托管中转的 LLM 级。
+- 结论：该托管中转无法支撑"完整流畅对话"，且不是本机可调好的。建议转本地 realtime 服务端方案。
