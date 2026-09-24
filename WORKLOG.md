@@ -414,3 +414,9 @@ and were deliberately not restarted here.
 - 日记页交付：http://127.0.0.1:8800（`start_diary.ps1` 启动）。`diary/diary_store.py` 暴露 `record(image, reading)`，眼镜链路在 `bridge/glasses_pipeline.py` 的 `Pipeline.handle` 里通过 `_remember()` 写入——该函数吞掉一切异常，日记存储出问题绝不会拖累机器人的反应。自测：写入 12 条并读回成功，测试条目已清除。
 - 当前整机状态：daemon 8000（1.11.0，desktop_app_daemon=false）、对话应用 7860、语音服务端 8765、状态面板 8770、日记页 8800，全部在线；面板判定"整套都在跑"。
 - 面板收尾：标题里的"海风"按要求去掉，改为 Reachy；摄像头卡拆成两张——"Reachy 的摄像头"只讲机器人自己的媒体设备，"眼镜"讲眼镜链路的照片与日记页，并把 8800 纳入端口监测（子线程交付时也独立指出过这两者被混在一起）。双视口截图已过：390 与 1400 均无横向溢出。
+
+## 2026-09-24 断电恢复
+- 断电后软件侧全部重拉：daemon 8000（我们的 1.11.0，官方客户端没占）、语音服务端 8765、状态面板 8770、日记页 8800、眼镜 bridge、robot_guard、conversation_watchdog。对话应用 7860 暂时起不来——它的启动脚本会检查 daemon 状态，daemon 还在 error 就拒绝启动，这是对的；机器人一回来 guard 会自动把它拉起来（conversation.pid 在）。
+- **硬件才是阻塞**。依次观察到三个不同的错误，每一个都更进一步：`No Reachy Mini serial port found`（USB 没枚举）→ 插上后 COM11 出现、变成 `No motors detected. Check if the power supply is connected and turned on!`（USB 通了但 7V 电源没通）→ 随后 COM11 又整个消失。两端都单独通过，但从未同时通。
+- 新增 `start_guards.ps1`，把两个守护进程的启动固化，并把 robot_guard 的退避调紧到 `--cooldown 20 --max-backoff 60`：演示现场让机器人死四分钟等于演示死了。
+- 两个踩过的坑写进脚本注释：(1) Windows PowerShell 以 ANSI 读 .ps1，脚本里硬编码含中文的路径会被读坏，所有重定向报 DirectoryNotFoundException——因此全部路径走 `$PSScriptRoot`，文件保持纯 ASCII。(2) venv 的 python.exe 是启动壳，会派生真解释器子进程，**一个 guard 永远显示成两条 python.exe**（同命令行、同创建时间）；按进程数"去重"会把父子一起杀掉，我连着踩了三次。判断 guard 是否活着要看 robot_guard.log 有没有在推进，不要数进程。
