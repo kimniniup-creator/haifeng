@@ -34,6 +34,16 @@ logger = logging.getLogger(__name__)
 MIN_GAP_S = 8.0
 
 
+def _remember(path: Path, reading: Dict[str, Any]) -> None:
+    """Hand the moment to the diary, and never let it break the pipeline."""
+    try:
+        from diary.diary_store import record
+
+        record(path, reading)
+    except Exception as error:
+        logger.debug("diary not recorded: %s", error)
+
+
 class Pipeline:
     """Serialise photo analysis so reactions never overlap on the robot."""
 
@@ -83,6 +93,9 @@ class Pipeline:
             self.handled += 1
             result["image"] = str(path)
             result["seconds"] = round(time.time() - started, 1)
+            # Keep the moment for Reachy's diary page. It never raises, so a
+            # storage problem cannot cost the robot its reaction.
+            _remember(path, result)
             print(
                 f"[{datetime.now().strftime('%H:%M:%S')}] "
                 f"{result['emotion']} {result['intensity']:.2f} "

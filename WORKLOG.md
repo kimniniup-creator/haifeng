@@ -411,3 +411,5 @@ and were deliberately not restarted here.
 - **官方客户端冲突**：用户打开 Reachy Mini Control 后，它抢占 8000 端口（desktop_app_daemon=true，版本由 1.11.0 退回 1.8.0）并独占摄像头与音频设备，我方 daemon 被顶掉、对话应用刷 Lost connection、动作与摄像头全失。关闭客户端后以 start_robot_media.ps1 恢复 1.11.0 并重启对话应用即恢复。两个 daemon 不能共用同一台机器人。
 - **新增本地状态面板** tools/status_board.py（http://127.0.0.1:8770）：机器人连接/电机/控制环、摄像头媒体占用、语音服务端与对话应用在线状态、转写模型、最后听到与最后回复的时间差及原文、最近数轮耗时。用户此前无法自查任何指标，只能等我贴日志。
 - 另派子线程制作面向观众的 Reachy 日记页（端口 8800，皮克斯 + Reachy 视觉语言）。
+- 日记页交付：http://127.0.0.1:8800（`start_diary.ps1` 启动）。`diary/diary_store.py` 暴露 `record(image, reading)`，眼镜链路在 `bridge/glasses_pipeline.py` 的 `Pipeline.handle` 里通过 `_remember()` 写入——该函数吞掉一切异常，日记存储出问题绝不会拖累机器人的反应。自测：写入 12 条并读回成功，测试条目已清除。
+- 当前整机状态：daemon 8000（1.11.0，desktop_app_daemon=false）、对话应用 7860、语音服务端 8765、状态面板 8770、日记页 8800，全部在线；面板判定"整套都在跑"。

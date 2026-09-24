@@ -31,7 +31,8 @@ except ImportError:  # still works outside the venv, just via netstat
 
 ROOT = Path(r"D:\海风")
 RUNTIME = ROOT / ".runtime"
-DAEMON = "http://127.0.0.1:8000"
+DAEMON_PORT = 8000
+DAEMON = f"http://127.0.0.1:{DAEMON_PORT}"
 REALTIME_PORT = 8765
 APP_PORT = 7860
 
@@ -214,7 +215,8 @@ def verdict(data: Dict[str, Any]) -> Dict[str, Any]:
     if robot["desktop_client"]:
         bad.append("官方桌面客户端已接管机器人，这套程序拿不到它")
     if not robot["up"]:
-        bad.append("机器人 daemon 无响应（8000 端口没人接）")
+        bad.append(f"机器人 daemon 卡住了（{DAEMON_PORT} 端口在听但不回应）" if robot["serving"]
+                   else f"机器人 daemon 没在跑（{DAEMON_PORT} 端口没人监听）")
     elif robot["error"]:
         bad.append(f"机器人报错：{robot['error']}")
     elif robot["state"] != "running":
@@ -223,9 +225,9 @@ def verdict(data: Dict[str, Any]) -> Dict[str, Any]:
         warn.append(f"电机 {robot['motors'] or '未知'}，机器人不会动")
 
     if not voice["up"]:
-        bad.append("语音服务端离线（8765 端口），说话不会有任何反应")
+        bad.append(f"语音服务端离线（{REALTIME_PORT} 端口），说话不会有任何反应")
     if not voice["app_up"]:
-        bad.append("对话应用离线（7860 端口）")
+        bad.append(f"对话应用离线（{APP_PORT} 端口）")
     if voice["up"] and not voice["stt"]:
         warn.append("日志里没有转写模型，语音链路可能还没起完")
 
@@ -256,9 +258,12 @@ def verdict(data: Dict[str, Any]) -> Dict[str, Any]:
 
 def _collect() -> Dict[str, Any]:
     """Everything the page needs, gathered fresh."""
-    status = _get(f"{DAEMON}/api/daemon/status")
-    # One unreachable daemon means all of its endpoints are unreachable, and
-    # asking anyway would stack up timeouts underneath a three-second poll.
+    # Something on this machine drops connections to dead loopback ports instead
+    # of refusing them, so an HTTP call to a daemon that is not running costs the
+    # full timeout. The listener table is already in hand, so ask it first — and
+    # "port not listening" and "port listening but silent" are different faults.
+    serving = _listening(DAEMON_PORT)
+    status = _get(f"{DAEMON}/api/daemon/status") if serving else None
     media = specs = running = None
     if status is not None:
         media = _get(f"{DAEMON}/api/media/status")
@@ -274,8 +279,12 @@ def _collect() -> Dict[str, Any]:
 
     data = {
         "now": datetime.now().strftime("%H:%M:%S"),
+        # The page prints these rather than its own copy, so a label can never
+        # name a different port from the one actually checked.
+        "ports": {"daemon": DAEMON_PORT, "realtime": REALTIME_PORT, "app": APP_PORT},
         "robot": {
             "up": status is not None,
+            "serving": serving,
             "state": (status or {}).get("state"),
             "error": (status or {}).get("error") or backend.get("error"),
             "version": (status or {}).get("version"),
@@ -348,6 +357,7 @@ PAGE = """<!doctype html>
  .tile .num{font-size:40px;font-weight:700;line-height:1.1;margin:2px 0 4px;
             font-variant-numeric:tabular-nums}
  .tile .unit{font-size:15px;font-weight:600;margin-left:6px;opacity:.85}
+ .tile .word{font-size:26px}
  .tile .txt{font-size:13px;color:var(--dim);overflow:hidden;
             display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
  .t-ok .num{color:var(--ok)}
@@ -374,10 +384,11 @@ PAGE = """<!doctype html>
  .big{font-size:15px;font-weight:600}
  .quote{font-size:13.5px;margin:2px 0 0;line-height:1.45;overflow-wrap:anywhere}
  .who{color:var(--dim);font-size:12px}
- .turn{padding:8px 0;border-bottom:1px solid var(--line)}
- .turn:last-child{border:0}
+ .turns{display:grid;gap:0 20px;grid-template-columns:repeat(auto-fit,minmax(330px,1fr))}
+ .turn{padding:8px 0;border-bottom:1px solid var(--line);min-width:0}
  .empty{color:var(--dim);font-size:13.5px}
- @media(min-width:980px){.wide{grid-column:span 2}}
+ body.stale #fresh,body.stale #grid,body.stale #alarm{opacity:.4}
+ @media(min-width:640px){.wide{grid-column:1/-1}}
  @media(max-width:430px){
    body{padding:12px}
    .grid{grid-template-columns:1fr}
@@ -401,7 +412,7 @@ const card = (t,rows,cls='') => `<div class="card ${cls}"><h2>${t}</h2>${rows.jo
 const gone = (t='无数据') => `<span class="none">${t}</span>`;
 
 function ago(s){
-  if (s===null || s===undefined) return {n:'—', u:'从未', lvl:'warn'};
+  if (s===null || s===undefined) return {n:'从未', u:'', lvl:'warn', word:true};
   if (s < 60)   return {n:Math.round(s), u:'秒前', lvl:'ok'};
   if (s < 300)  return {n:Math.floor(s/60), u:'分钟前', lvl:'warn'};
   if (s < 3600) return {n:Math.floor(s/60), u:'分钟前', lvl:'bad'};
@@ -411,17 +422,18 @@ function ago(s){
 function tile(lab, secs, text){
   const a = ago(secs);
   return `<div class="tile t-${a.lvl}"><div class="lab">${lab}</div>
-    <div class="num">${a.n}<span class="unit">${a.u}</span></div>
-    <div class="txt">${text ? esc(text) : '—'}</div></div>`;
+    <div class="num${a.word ? ' word' : ''}">${a.n}<span class="unit">${a.u}</span></div>
+    <div class="txt">${text ? esc(text) : '日志里没有记录'}</div></div>`;
 }
 
-let snap = null, at = 0, offline = false;
+let snap = null, at = 0, fails = 0;
+const LOST = 10;   // seconds without a successful poll before the page says so
 
 async function poll(){
   try {
     const r = await fetch('/api/status', {cache:'no-store'});
-    snap = await r.json(); at = Date.now(); offline = false;
-  } catch(e){ offline = true; }
+    snap = await r.json(); at = Date.now(); fails = 0;
+  } catch(e){ fails++; }
   draw();
 }
 
@@ -429,23 +441,33 @@ function draw(){
   const drift = (Date.now() - at) / 1000;   // keep the seconds climbing between polls
   const clock = document.getElementById('clock');
   const box = document.getElementById('verdict');
+  // One dropped poll is a hiccup, not an outage; shouting about it would train
+  // her to ignore the banner. Only a snapshot gone properly stale counts.
+  const lost = !snap || drift > LOST;
 
-  if (offline || !snap){
+  if (!snap){
     clock.textContent = '状态服务不可用';
     box.className = 'verdict v-bad';
     box.innerHTML = '<div class="line">状态页自己拿不到数据</div>'
       + '<div class="why">8770 端口上的 status_board.py 可能已经退出</div>';
     return;
   }
+  document.body.classList.toggle('stale', lost);
   clock.textContent = '最后更新 ' + snap.now + ' · 每 3 秒自动刷新'
-    + (drift > 10 ? ' · 已 ' + drift.toFixed(0) + ' 秒没刷新成功' : '');
+    + (fails ? ' · 连续 ' + fails + ' 次没取到' : '');
 
   const vd = snap.verdict;
-  box.className = 'verdict v-' + vd.level;
-  box.innerHTML = `<div class="line">${esc(vd.line)}</div>` +
-    (vd.why.length ? `<div class="why">${vd.why.map(w=>`<div>· ${esc(w)}</div>`).join('')}</div>` : '');
+  if (lost){
+    box.className = 'verdict v-bad';
+    box.innerHTML = `<div class="line">状态页已经 ${drift.toFixed(0)} 秒没拿到数据</div>`
+      + '<div class="why">下面是旧快照，不代表现在的状态 · 检查 8770 端口上的 status_board.py</div>';
+  } else {
+    box.className = 'verdict v-' + vd.level;
+    box.innerHTML = `<div class="line">${esc(vd.line)}</div>` +
+      (vd.why.length ? `<div class="why">${vd.why.map(w=>`<div>· ${esc(w)}</div>`).join('')}</div>` : '');
+  }
 
-  const r = snap.robot, v = snap.voice, c = snap.camera;
+  const r = snap.robot, v = snap.voice, c = snap.camera, P = snap.ports;
   document.getElementById('alarm').innerHTML = r.desktop_client
     ? '<div class="alarm">官方桌面客户端已接管机器人 —— 语音、动作、摄像头都拿不到它，先退出桌面客户端</div>'
     : '';
@@ -457,7 +479,7 @@ function draw(){
   const robot = card('机器人', [
     row('连接', r.up ? dot(r.state==='running' && !r.error)
         + (r.state==='running' && !r.error ? '正常' : esc(r.error || r.state || '异常'))
-      : dot(false) + '无响应 · 8000 端口'),
+      : dot(false) + (r.serving ? '端口在听但不回应' : '没在跑 · ' + P.daemon + ' 端口没人监听')),
     row('电机', r.up ? dot(r.motors==='enabled') + esc(r.motors || '未知') : gone()),
     row('控制环', r.hz===null ? gone() : r.hz + ' Hz'),
     row('控制环错误', r.errors===null||r.errors===undefined ? gone() : r.errors + ' 次'),
@@ -468,8 +490,8 @@ function draw(){
   ]);
 
   const voice = card('语音链路', [
-    row('服务端 :8765', dot(v.up) + (v.up ? '在线' : '<span class="none">离线</span>')),
-    row('对话应用 :7860', dot(v.app_up) + (v.app_up ? '在线' : '<span class="none">离线</span>')),
+    row('服务端 :' + P.realtime, dot(v.up) + (v.up ? '在线' : '<span class="none">离线</span>')),
+    row('对话应用 :' + P.app, dot(v.app_up) + (v.app_up ? '在线' : '<span class="none">离线</span>')),
     row('转写模型', v.stt ? esc(v.stt) : gone('日志里没有')),
     row('日志内轮次', v.turns_seen + ' 轮'),
     row('近几轮中位耗时', v.median===null ? gone('暂无') : v.median + ' 秒'),
@@ -486,6 +508,7 @@ function draw(){
 
   let turns = '<div class="card wide"><h2>最近几轮</h2>';
   if (!v.turns.length) turns += '<div class="empty">日志里还没有一轮完整对话</div>';
+  turns += '<div class="turns">';
   for (const t of v.turns.slice().reverse()){
     const total = (t.model||0) + (t.speech||0);
     turns += `<div class="turn">
@@ -493,11 +516,12 @@ function draw(){
         <span class="big">${total ? total.toFixed(1)+' 秒' : gone('耗时缺失')}</span>
         <span class="who">模型 ${t.model===null?'—':t.model+'s'} · 合成 ${t.speech===null?'—':t.speech+'s'}</span>
       </div>
-      <div class="who">你说</div><div class="quote">${esc(t.heard) || '—'}</div>
+      <div class="who">你说</div>
+      <div class="quote">${t.heard ? esc(t.heard) : '<span class="empty">这轮日志里没有对应的 heard</span>'}</div>
       <div class="who" style="margin-top:4px">它说</div><div class="quote">${esc(t.reply)}</div>
     </div>`;
   }
-  turns += '</div>';
+  turns += '</div></div>';
 
   document.getElementById('grid').innerHTML = robot + voice + cam + turns;
 }
