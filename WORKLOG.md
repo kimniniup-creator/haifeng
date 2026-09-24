@@ -341,3 +341,11 @@ and were deliberately not restarted here.
 - 已验证（实机帧缓冲截图 qa-artifacts/m5，本地不入库）：照片时间线五帧、菜单与占位预览、真实眼镜存图经 gpt-5.6-sol → M5 显示"我还看不清呢"。截图靠 USB 注入手势驱动，已与实体按键计数分开；实体按键/摇晃/侧倾手感、眼镜实拍按快门到 M5 待 Kim 现场验证。
 - tools/m5_screen.py：冻结动画时钟抓彩色截图、注入手势、跑照片时间线。
 - 刷机坑：esptool 默认 RTS 硬复位会让 S3 停在 ROM 下载模式，需 `--after watchdog_reset`。
+
+## 2026-09-24 照片情感映射收口 + 摇 M5 让 Reachy 晃头
+- scene_agent.EMOTION_MAP 成为唯一映射表：8 种情绪 × 强/中/弱三档，每档 1–3 个备选动作（不连续重复），同时给出 M5 表情；置信度 <0.5 时 Reachy 用 attentive1、M5 用 neutral，两边一致。36 个动作名全部在实时库（85 个）中核对通过。负面情绪 Reachy 表达共情，去掉了 contempt1。
+- 实机播放：新增的 laughing2/success1/proud1/welcoming1/welcoming2 已在 Reachy 上完整播放；其余 15 个新增动作只核对了库存在、未实机播放（当时另一会话在用机器人与眼镜，未打扰）。
+- 连播第 6 个动作时 daemon 报 Motor communication error，按既有路径 daemon/restart + motors enabled 恢复；是否由连续播放引起未确定。
+- M5 固件（SHA256 1ae7e659…3bcc）发 m5_motion：摇晃按主轴区分（左右 x→Reachy 摇头 yaw，上下 y→点头 pitch，扭转 z→roll 晃），侧倾停稳 600ms 发 tilt 左/右。bridge/m5_motion.py 用 daemon goto 串成衰减三摆（运行中 daemon 会忽略对话应用的 set_target，不打架），侧倾对应一次好奇歪头；M5_TILT_SIGN 可翻转方向。
+- 实测（USB 注入手势，事件标 injected）：摇头 yaw −7°…+17°，点头 pitch +0.5°…+17.6°，roll −9.6°…+12.6°，右倾 roll 到 −19° 后回正。真人实摇的轴向判定与侧倾方向待 Kim 手测。
+- glasses_pipeline run 默认同时开启镜像（--no-m5-motion 关闭），因为 M5 串口只能被一个进程占用。

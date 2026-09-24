@@ -31,21 +31,51 @@ EMOTIONS = (
     "sadness", "fear", "anger", "neutral",
 )
 
-# Strong / medium / soft per feeling. Names verified against the live library.
-EMOTION_MOVES: Dict[str, tuple[str, str, str]] = {
-    "joy": ("laughing1", "cheerful1", "enthusiastic1"),
-    "affection": ("loving1", "grateful1", "serenity1"),
-    "surprise": ("amazed1", "surprised1", "surprised2"),
-    "curiosity": ("curious1", "inquiring1", "inquiring2"),
-    "sadness": ("sad1", "sad2", "downcast1"),
-    "fear": ("scared1", "anxiety1", "uncertain1"),
-    "anger": ("irritated1", "displeased2", "contempt1"),
-    "neutral": ("attentive1", "understanding2", "attentive2"),
+# One table for both bodies: per feeling, Reachy's moves at strong / medium /
+# soft intensity (several each, so the same photo mood does not always look
+# identical), and how the M5 pocket window acts it out. All names verified
+# against the live library (85 moves). Negative feelings get empathy on Reachy,
+# never contempt; the M5 still ends in a gentle laugh.
+EMOTION_MAP: Dict[str, Dict[str, Any]] = {
+    "joy": {"m5": "delighted", "moves": (
+        ("laughing1", "laughing2", "success1"),
+        ("cheerful1", "enthusiastic1", "proud1"),
+        ("enthusiastic2", "welcoming1"))},
+    "affection": {"m5": "love", "moves": (
+        ("loving1",),
+        ("grateful1", "welcoming2"),
+        ("serenity1", "shy1"))},
+    "surprise": {"m5": "wow", "moves": (
+        ("amazed1", "electric1"),
+        ("surprised1", "oops1"),
+        ("surprised2", "oops2"))},
+    "curiosity": {"m5": "curious", "moves": (
+        ("curious1", "inquiring3"),
+        ("inquiring1", "thoughtful1"),
+        ("inquiring2", "thoughtful2"))},
+    "sadness": {"m5": "gentle", "moves": (
+        ("sad1", "lonely1"),
+        ("sad2", "downcast1"),
+        ("yes_sad1", "resigned1"))},
+    "fear": {"m5": "gentle", "moves": (
+        ("scared1", "fear1"),
+        ("anxiety1", "uncomfortable1"),
+        ("uncertain1",))},
+    "anger": {"m5": "gentle", "moves": (
+        ("irritated2", "frustrated1"),
+        ("irritated1", "displeased1"),
+        ("displeased2", "uncomfortable1"))},
+    "neutral": {"m5": "neutral", "moves": (
+        ("attentive1", "understanding1"),
+        ("understanding2", "attentive2"),
+        ("attentive2", "understanding1"))},
 }
+EMOTION_MOVES = {name: entry["moves"] for name, entry in EMOTION_MAP.items()}
 
 # Below this the reading is not trusted enough to act it out.
 MIN_CONFIDENCE = 0.5
 FALLBACK_MOVE = "attentive1"
+_last_move = ""
 
 PROMPT = (
     "You are the perception stage for a small desk robot. You get one photo taken "
@@ -153,11 +183,22 @@ def _parse(text: str) -> Dict[str, Any]:
 
 def choose_move(analysis: Dict[str, Any]) -> str:
     """Pick the move for a reading, or hold back when the model is unsure."""
+    global _last_move
     if analysis["confidence"] < MIN_CONFIDENCE:
         return FALLBACK_MOVE
     strong, medium, soft = EMOTION_MOVES[analysis["emotion"]]
     intensity = analysis["intensity"]
-    return strong if intensity >= 0.7 else medium if intensity >= 0.4 else soft
+    tier = strong if intensity >= 0.7 else medium if intensity >= 0.4 else soft
+    choices = [move for move in tier if move != _last_move] or list(tier)
+    _last_move = random.choice(choices)
+    return _last_move
+
+
+def m5_expression(analysis: Dict[str, Any]) -> str:
+    """How the pocket window acts out the same reading; unsure means neutral."""
+    if analysis["confidence"] < MIN_CONFIDENCE:
+        return "neutral"
+    return EMOTION_MAP[analysis["emotion"]]["m5"]
 
 
 def play(move: str, with_sound: bool = True, timeout: float = 15.0) -> Dict[str, Any]:
@@ -235,5 +276,6 @@ def react(image: bytes, with_sound: bool = True) -> Dict[str, Any]:
     analysis = analyse(image)
     move = choose_move(analysis)
     analysis["move"] = move
+    analysis["m5_expression"] = m5_expression(analysis)
     analysis["played"] = play(move, with_sound=with_sound)
     return analysis

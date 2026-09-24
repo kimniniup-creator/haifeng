@@ -19,17 +19,7 @@ logger = logging.getLogger(__name__)
 ESP_USB = (0x303A, 0x1001)
 MAX_CHARS = 24
 
-# What the robot feels -> how the pocket window acts it out. Every one ends laughing.
-EXPRESSIONS = {
-    "joy": "delighted",
-    "affection": "love",
-    "surprise": "wow",
-    "curiosity": "curious",
-    "sadness": "gentle",
-    "fear": "gentle",
-    "anger": "gentle",
-    "neutral": "neutral",
-}
+EXPRESSIONS = ("neutral", "delighted", "love", "wow", "curious", "gentle")
 
 
 def clean_line(text: str) -> str:
@@ -68,6 +58,8 @@ class M5Link:
         self.replies: list[Dict[str, Any]] = []
         self.dropped = 0  # replies trimmed from the front; positions stay absolute
         self.reader: Optional[threading.Thread] = None
+        # Called on the reader thread for every message the M5 sends.
+        self.listeners: list = []
 
     def _open(self) -> bool:
         if self.serial is not None and self.serial.is_open:
@@ -107,6 +99,11 @@ class M5Link:
                 except ValueError:
                     continue
                 self.replies.append(message)
+                for listener in self.listeners:
+                    try:
+                        listener(message)
+                    except Exception as error:
+                        logger.warning("M5 listener failed: %s", error)
                 if len(self.replies) > 400:
                     self.dropped += 200
                     del self.replies[:200]
@@ -160,15 +157,20 @@ class M5Link:
         message.update(fields)
         return self.send(message)
 
+    def connect(self) -> bool:
+        """Open the port now so the M5 can send motion before any photo arrives."""
+        with self.lock:
+            return self._open()
+
     def photo_received(self, event_id: str) -> bool:
         """The photo is here and being read: shutter flash, the card develops."""
         return self._event(event_id, "received")
 
-    def photo_replied(self, event_id: str, emotion: str, intensity: float, line: str) -> bool:
+    def photo_replied(self, event_id: str, expression: str, intensity: float, line: str) -> bool:
         """The saved reply: laugh, then show the line if it fits whole."""
         return self._event(
             event_id, "replied",
-            expression=EXPRESSIONS.get(emotion, "neutral"),
+            expression=expression if expression in EXPRESSIONS else "neutral",
             intensity=round(min(max(float(intensity), 0.0), 1.0), 2),
             text=clean_line(line),
         )

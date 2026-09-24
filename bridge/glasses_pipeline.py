@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 from bridge.scene_agent import react
 from bridge.luma_daemon import LumaSession
 from bridge.m5_link import M5Link
+from bridge.m5_motion import ReachyMirror
 
 
 logger = logging.getLogger(__name__)
@@ -73,7 +74,7 @@ class Pipeline:
 
             if self.m5 is not None:
                 await asyncio.to_thread(
-                    self.m5.photo_replied, event_id, result["emotion"],
+                    self.m5.photo_replied, event_id, result["m5_expression"],
                     result["intensity"], result.get("line_zh", ""),
                 )
 
@@ -163,7 +164,15 @@ async def _once(args: argparse.Namespace) -> int:
 
 
 def _m5(args: argparse.Namespace) -> M5Link | None:
-    return None if args.no_m5 else M5Link(os.getenv("M5_PORT") or None)
+    if args.no_m5:
+        return None
+    link = M5Link(os.getenv("M5_PORT") or None)
+    if not getattr(args, "no_m5_motion", False):
+        # Shake the M5, Reachy shakes its head: needs the port open from the start.
+        link.listeners.append(ReachyMirror().handle)
+        if not link.connect():
+            logger.warning("M5 not found; photos still go to Reachy")
+    return link
 
 
 async def _replay(args: argparse.Namespace) -> int:
@@ -186,6 +195,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--no-sound", action="store_true", help="move only, no bundled audio")
     parser.add_argument("--json", action="store_true", help="print the full reading")
     parser.add_argument("--no-m5", action="store_true", help="leave the M5 pocket window out")
+    parser.add_argument("--no-m5-motion", action="store_true", help="do not mirror M5 shakes on Reachy")
     parser.add_argument("-v", "--verbose", action="store_true")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
