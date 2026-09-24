@@ -9,3 +9,4 @@ sounddevice==0.5.6
 soundfile==0.14.0
 numpy==2.5.3
 websockets==17.1
+pyserial==3.5

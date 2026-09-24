@@ -333,3 +333,11 @@ and were deliberately not restarted here.
 - 移除感知组件后重测：1/4（"What colour is the sky" → "Blue"，23 秒）。
 - **四次探测累计 0/4、0/4、1/3、1/4 ≈ 成功率 2/15**。已排除的变量：工具数量（17→7→16→14 无变化）、VAD 参数（0.85/0.6/0.2 与打断开关组合）、门控实现缺陷（已修静音连续性与大包问题）、看门狗可靠性（已修自杀）。四轮探测中成功的两轮答案均正确、耗时 22–23 秒，证明链路本身正确，瓶颈在托管中转的 LLM 级。
 - 结论：该托管中转无法支撑"完整流畅对话"，且不是本机可调好的。建议转本地 realtime 服务端方案。
+
+## 2026-09-24 M5StickS3 随身分身：照片笑脸与互动（Kim 直接指派）
+- 固件在 reading-pet 分支 feat/photo-reactions（独立 worktree D:\reading-pet-worktrees\photo-reactions），build photo-reactions-0.7，应用 SHA256 67240dee…a9604，仅 app 0x10000 写入；刷前整片 8MB 备份在该 worktree 的 .delivery/backup（NVS 与 character-shell-0.6 应用哈希均与记录一致，可原样回滚）。原角色精灵未改，只加姿态编排与周边特效。
+- 眼镜链路：bridge/glasses_pipeline.py 每张照片发 photo_event received（快门闪白、拍立得卡片显影、角色好奇张望）→ 模型回复后发 replied（按情绪 delighted/love/wow/curious/gentle/neutral 表演，最后都会哈哈大笑）+ 中文短句气泡。scene_agent 提示词新增 line_zh（≤14 字），bridge/m5_link.py 负责 USB 串口与 24 字校验，超长不截断直接不显示。
+- 本机互动：A 戳一下咯咯笑、连戳两下跳起、三下笑翻；长按 A 摸头冒爱心；B 重看上一条照片回复；摇晃会晕然后笑；侧倾会跟着歪；扣过来睡觉；2 分钟无操作打盹。长按 B 打开 9 张卡片的互动菜单，喂零食/一起跳舞/想念 Reachy 为占位预览，屏上标"即将开放"。
+- 已验证（实机帧缓冲截图 qa-artifacts/m5，本地不入库）：照片时间线五帧、菜单与占位预览、真实眼镜存图经 gpt-5.6-sol → M5 显示"我还看不清呢"。截图靠 USB 注入手势驱动，已与实体按键计数分开；实体按键/摇晃/侧倾手感、眼镜实拍按快门到 M5 待 Kim 现场验证。
+- tools/m5_screen.py：冻结动画时钟抓彩色截图、注入手势、跑照片时间线。
+- 刷机坑：esptool 默认 RTS 硬复位会让 S3 停在 ROM 下载模式，需 `--after watchdog_reset`。

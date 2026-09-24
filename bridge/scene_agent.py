@@ -54,7 +54,9 @@ PROMPT = (
     '{"scene": "<one short sentence>", '
     f'"emotion": "<one of: {", ".join(EMOTIONS)}>", '
     '"intensity": <0.0-1.0>, "confidence": <0.0-1.0>, '
-    '"utterance": "<one short warm sentence the robot could say, or empty>"}\n\n'
+    '"utterance": "<one short warm sentence the robot could say, or empty>", '
+    '"line_zh": "<the same feeling as one short spoken Chinese line for a tiny '
+    'pocket screen, at most 14 characters, no emoji, no line breaks>"}\n\n'
     "emotion is what the ROBOT should express in response, not what it sees. "
     "Set confidence low when the photo is dark, blurred, or ambiguous - a wrong "
     "confident answer is worse than an unsure one."
@@ -145,6 +147,7 @@ def _parse(text: str) -> Dict[str, Any]:
         "intensity": ratio("intensity", 0.5),
         "confidence": ratio("confidence", 0.5),
         "utterance": str(data.get("utterance", "")).strip(),
+        "line_zh": str(data.get("line_zh", "")).strip(),
     }
 
 
