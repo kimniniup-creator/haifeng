@@ -30,7 +30,7 @@ TILT_SIGN = float(os.getenv("M5_TILT_SIGN", "-1"))
 SHAKE_ANGLE = {"x": "yaw", "y": "pitch", "z": "roll"}
 
 
-def _call(method: str, path: str, body: Dict[str, Any] | None = None, timeout: float = 3.0) -> Any:
+def _call(method: str, path: str, body: Dict[str, Any] | None = None, timeout: float = 8.0) -> Any:
     data = json.dumps(body).encode() if body is not None else None
     request = urllib.request.Request(
         DAEMON + path, data=data, method=method, headers={"Content-Type": "application/json"}
@@ -126,3 +126,28 @@ class ReachyMirror:
                 return True
             time.sleep(0.02)
         return False
+
+
+def main() -> int:
+    """Mirror M5 shakes on Reachy without the glasses: `python -m bridge.m5_motion`."""
+    import sys
+    from bridge.m5_link import M5Link
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+    link = M5Link(os.getenv("M5_PORT") or None)
+    mirror = ReachyMirror()
+    link.listeners.append(mirror.handle)
+    link.listeners.append(lambda m: m.get("type") == "m5_motion" and logger.info("M5 says: %s", m))
+    if not link.connect():
+        print("M5 not found", file=sys.stderr)
+        return 1
+    print("Mirroring M5 shakes on Reachy. Ctrl+C to stop.", flush=True)
+    try:
+        while True:
+            time.sleep(1.0)
+    except KeyboardInterrupt:
+        return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
