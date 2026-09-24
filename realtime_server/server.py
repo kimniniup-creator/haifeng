@@ -54,12 +54,22 @@ MAX_UTTERANCE_S = 8
 # whole utterance is one useless 30 s block. The person addressing a desk robot
 # is far louder than the room behind them, so loudness against the room's own
 # floor decides what counts as speech aimed at us.
-NEAR_RATIO = 2.6
-NEAR_FLOOR_MIN = 150.0
+NEAR_RATIO = 2.4
+# Measured in the hall: room chatter sits at 200-900 rms, the person leaning in
+# peaks at 1000-4800. Silero calls almost every chunk "voiced" in a crowd, so
+# loudness - not the voice/no-voice flag - is what separates them.
+NEAR_FLOOR_MIN = 420.0
 
 
 def _env(name: str, default: str) -> str:
     return os.getenv(name, default)
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except ValueError:
+        return default
 
 
 # --------------------------------------------------------------------------- #
@@ -168,6 +178,9 @@ class Session:
         self._counter = 0
         self._floor = 0.0
         self._rms_history: List[float] = []
+        self._last_probe = 0.0
+        # Read here, not at import: dotenv is loaded by main() afterwards.
+        self._probe_s = _env_float("REACHY_LEVEL_PROBE_S", 0.0)
 
     def _id(self, prefix: str) -> str:
         self._counter += 1
@@ -235,17 +248,29 @@ class Session:
             rms = float(np.sqrt(np.mean(chunk.astype(np.float32) ** 2)))
             voiced = self.vad.speech(chunk)
 
-            # Only quiet chunks teach the floor; a long utterance would otherwise
-            # raise the bar until nothing clears it again.
-            if not voiced:
-                self._rms_history.append(rms)
-                if len(self._rms_history) > 900:
-                    del self._rms_history[:300]
-                if len(self._rms_history) >= 25:
-                    ordered = sorted(self._rms_history[-900:])
-                    self._floor = max(ordered[len(ordered) // 5], NEAR_FLOOR_MIN)
+            # Learn the floor from every chunk and take a low percentile: in a
+            # crowd Silero marks nearly everything as voiced, so waiting for
+            # "not voiced" chunks leaves the floor pinned at its minimum.
+            self._rms_history.append(rms)
+            if len(self._rms_history) > 900:
+                del self._rms_history[:300]
+            if len(self._rms_history) >= 40:
+                ordered = sorted(self._rms_history[-900:])
+                self._floor = ordered[len(ordered) // 5]
 
             is_speech = voiced and rms >= max(self._floor, NEAR_FLOOR_MIN) * NEAR_RATIO
+
+            # Tuning probe: what the microphone actually delivers, so the
+            # near-field threshold can be set from measurement not guesswork.
+            if self._probe_s > 0:
+                now_s = time.time()
+                if now_s - self._last_probe >= self._probe_s:
+                    self._last_probe = now_s
+                    logger.info(
+                        "levels: rms=%.0f floor=%.0f need=%.0f voiced=%s counts=%s",
+                        rms, self._floor, max(self._floor, NEAR_FLOOR_MIN) * NEAR_RATIO,
+                        voiced, is_speech,
+                    )
 
             if not self._speaking:
                 self._speech_run = self._speech_run + 1 if is_speech else 0

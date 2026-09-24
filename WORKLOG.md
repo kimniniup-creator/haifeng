@@ -385,3 +385,10 @@ and were deliberately not restarted here.
 - 固件对每个用户触发的状态发 m5_action（giggle/hop/laugh/pat_start/pat_end/question/replay/no/yes/dizzy/tilt_left/tilt_right/wake/sleep/menu_open/menu_next/snack/dance/miss/photo_demo/pat_demo）。
 - 主机 bridge/m5_motion.py 逐一映射：快手势用 goto（头+天线），情绪类复用 EMOTION_MAP（三连戳=joy 强档，侧键?=curiosity 中档，重看=上张照片的同一个动作），菜单卡 snack→grateful1、dance→dance1、miss→loving1、sleep→sleep1；长按 A 期间 Reachy 一直低头被摸，松手咯咯笑。
 - 实机（USB 注入）逐项核对 M5 模式 / 事件 / Reachy 实测：no yaw 幅度 24°、yes pitch 11°、dizzy roll 13°、tilt roll 17–22°+天线、戳一下天线 33°、侧键播 inquiring1。固件 SHA256 96ce53a0…，已实刷。
+
+## 2026-09-24 按实测分布重调近场门槛
+- 用户问"是慢、听不懂、还是太吵"。取 160 轮日志量化：用户音频长度中位 8.0 秒（恰为上限，说明 VAD 从未判定过停顿）、转写中位 7.0 秒、模型+合成中位 6.0 秒、总延迟中位 14 秒。转写内容明显为会场他人对话。结论：根因是噪声，听不懂与慢都是其后果。
+- 新增 REACHY_LEVEL_PROBE_S 电平探针（默认关闭）。实测：房间+用户 rms 跨度 54–4759；`voiced` 几乎恒为 True（满场人声），导致"仅用非语音块学习地板"的设计失效，floor 永远停在下限 150、need 仅 390，等于全放行。
+- 修正：地板改为从全部块学习并取 20 分位；下限 150→420，倍数 2.6→2.4（need ≈1000 起）。实测生效后 floor 自适应到 610–753、need 1465–1807，多数房间杂音 counts=False，单轮长度由恒定 8.0 秒变为 0.58–8.0 秒。
+- 另修一处与此前同类的缺陷：探针阈值在模块导入时读取 env，而 dotenv 在 main() 中才加载，导致探针恒不生效。改为运行时读取。
+- 残留限制：远场麦阵列下用户声音与满场人声响度相当，无法仅靠响度完全分离。最有效的办法是靠近机器人说话；DOA 方向门控需要 media 所有权，当前由对话应用持有，未实施。
