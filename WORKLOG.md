@@ -243,3 +243,15 @@ and were deliberately not restarted here.
 - 离线验证：在真实抓拍图上检测到 1 张人脸、对齐 112×112、128 维归一化 embedding、自相似度 1.0、随机向量 0.173。应用侧日志确认 `Loaded external tool: face_memory` 且已进入实时会话工具表。实机语音录入待用户验收。
 - **声纹未做**：整个栈内无说话人识别能力，音频只有 DOA 与 VAD；且麦克风被对话应用独占，需另起采集通道与说话人 embedding 模型。已向用户说明，等确认后再做。
 - 未动：官方客户端未重启（当前未运行）；patches/reachy_expression 保留未安装（客户端旁路后不生效）。
+
+## 2026-09-24 VAD 修复 / 眼镜常驻链路 / 手势交互
+- **对话应用"不说话"根因**：日志显示每 0.5–4 秒一次 `User intervention: flushing player queue`，嘈杂会场的环境噪声持续触发 VAD 打断，机器人每次刚开口就被掐断。上游把 `turn_detection=ServerVad(type="server_vad", interrupt_response=True)` 写死且未设阈值。新增 patches/conversation_vad/apply.py（幂等、带 .orig 备份与 --rollback），改为读环境变量，默认 threshold=0.85 / prefix_padding=300ms / silence=900ms / interrupt=off。重启后打断次数 0。代价：不能中途插嘴打断，用 REACHY_VAD_* 可调。
+- **眼镜常驻链路**（bridge/luma_daemon.py）：LumaSession 持久连接 + 自动重连退避，AA14/AA15 订阅常驻。实测 E06-0055（D8:53:65:00:00:55）链路建立 9.5s，此后单张 **2.1s**（原 luma_ble 每张都要重新扫描/连接/握手）。握手全部有回应：型号 S3、电量 98%。
+- 自查修掉一处自己引入的竞态：run() 循环与 capture() 同时消费 file_updates 队列，导致通知被后台循环吃掉、capture 必然超时。改为 run() 单一消费者，capture 挂 future 等待；未请求而到达的文件走 on_image 回调。
+- `listen` 子命令用于实测眼镜自己按快门时是否主动推文件——这是固件属性，代码侧已经能同等处理，待现场按快门验证。
+- **手势交互**（bio_tools/gesture_watch.py）：MediaPipe GestureRecognizer（models/gesture_recognizer.task，8.4MB，不进 Git）在后台线程按 10Hz 取帧，复用对话应用自己的 MediaManager，不与摄像头争用。
+- 挥手判定为时序特征而非静态姿势：2 秒窗口内手腕 x 方向反转 ≥3 次、总行程 ≥0.10（归一化）、且过半帧为张开手掌。离线用例四项全对：挥手 True；静止 False；单向伸手 False（反转 0）；握拳挥动 False。检出后 6 秒冷却，并直接 REST 播 welcoming1 回应。
+- **头部跟手**：用 SDK look_at_image(u,v,duration=0) 走 set_target 流式下发，增益 0.6（只偏向手、不追到画面边缘），EMA 平滑 0.45，死区 0.015；手消失即清空平滑状态避免重新出现时甩头。启用跟手时自动关闭 daemon 人脸跟踪，否则两者抢同一组关节。
+- 数据集结论：挥手不需要数据集与训练。若要扩手势词表，HaGRID（静态 18 类）在 HF 有多个镜像；动态类（Jester）需单独获取。已向用户说明。
+- 工具启用需带 Origin 头调 RPC（应用对 WebSocket 有 Origin 校验，否则 403）。face_memory 与 gesture_watch 均已在 default 人格启用并进入实时会话工具表。
+- 待用户现场验收：挥手识别、头部跟手、人脸录入；眼镜快门主动推送。

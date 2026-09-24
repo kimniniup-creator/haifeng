@@ -17,3 +17,5 @@ qa-artifacts/
 !.env.example
 conv-env/
 conversation/
+models/
+.runtime/glasses/
