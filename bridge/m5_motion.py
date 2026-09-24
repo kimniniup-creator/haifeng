@@ -13,7 +13,6 @@ import os
 import json
 import math
 import time
-import queue
 import logging
 import threading
 import urllib.request
@@ -43,12 +42,15 @@ def _call(method: str, path: str, body: Dict[str, Any] | None = None, timeout: f
 def shake_keyframes(axis: str, strength: float) -> List[Tuple[Dict[str, float], float]]:
     """(offset, seconds) steps for one shake: three swings that die away."""
     angle = SHAKE_ANGLE.get(axis, "yaw")
-    peak = math.radians(12 + 14 * min(max(strength, 0.0), 1.0))
+    # Big enough to see from across the desk; well inside the head's range.
+    peak = math.radians(18 + 12 * min(max(strength, 0.0), 1.0))
     if angle == "pitch":
         peak *= 0.7  # nodding reads bigger than turning
+    elif angle == "roll":
+        peak *= 0.8
     steps = []
-    for i, scale in enumerate((1.0, -0.85, 0.65, -0.45, 0.25)):
-        steps.append(({angle: peak * scale}, 0.16 if i else 0.12))
+    for i, scale in enumerate((1.0, -1.0, 0.8, -0.6, 0.35)):
+        steps.append(({angle: peak * scale}, 0.18 if i else 0.14))
     steps.append(({}, 0.2))
     return steps
 
@@ -62,10 +64,19 @@ def tilt_keyframes(side: str) -> List[Tuple[Dict[str, float], float]]:
 
 
 class ReachyMirror:
-    """Plays M5 gestures on Reachy one at a time; extra gestures while busy are dropped."""
+    """Plays M5 gestures on Reachy one at a time.
+
+    One gesture waits while another plays. A shake always takes that slot, and
+    tilts that arrive around a shake are ignored: shaking rocks the tilt
+    reading both ways, and a head tilt must not stand in for the head shake.
+    """
+
+    SHAKE_HOLD_S = 1.5
 
     def __init__(self) -> None:
-        self.jobs: "queue.Queue[Dict[str, Any]]" = queue.Queue(maxsize=1)
+        self.pending: Dict[str, Any] | None = None
+        self.ready = threading.Condition()
+        self.last_shake = 0.0
         self.played = 0
         self.last: Dict[str, Any] = {}
         threading.Thread(target=self._work, daemon=True).start()
@@ -74,14 +85,25 @@ class ReachyMirror:
         """M5Link listener: take m5_motion events, ignore everything else."""
         if message.get("type") != "m5_motion":
             return
-        try:
-            self.jobs.put_nowait(message)
-        except queue.Full:
-            logger.info("Reachy still moving; dropped %s", message.get("gesture"))
+        with self.ready:
+            if message.get("gesture") == "shake":
+                self.last_shake = time.monotonic()
+            elif time.monotonic() - self.last_shake < self.SHAKE_HOLD_S or (
+                self.pending is not None and self.pending.get("gesture") == "shake"
+            ):
+                logger.info("tilt ignored during a shake")
+                return
+            if self.pending is not None:
+                logger.info("replacing waiting %s", self.pending.get("gesture"))
+            self.pending = message
+            self.ready.notify()
 
     def _work(self) -> None:
         while True:
-            message = self.jobs.get()
+            with self.ready:
+                while self.pending is None:
+                    self.ready.wait()
+                message, self.pending = self.pending, None
             try:
                 self.play(message)
             except Exception as error:

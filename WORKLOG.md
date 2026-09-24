@@ -360,3 +360,10 @@ and were deliberately not restarted here.
 - TTS 根因（子线程交付 realtime_server/tts.py）：piper 的 espeak-ng 数据实际已随包安装，但**项目路径含中文"海风"**，espeak-ng 以窄字节路径打开失败并回退到编译期路径，报出误导性的 `D:/a/piper1-gpl/...`。解法为把数据镜像到 ASCII 路径再传入。每句合成 0.125–0.164s，STT 回转逐字一致。
 - 服务端配置读项目根 .env（非 conversation/.env）：REACHY_STT_MODEL / REACHY_STT_LANGUAGE / REACHY_VAD_SERVER_THRESHOLD / REACHY_CHAT_MODEL。
 - 新增 tools/dance_keeper.py：仅在 `/api/move/running` 为空且电机 enabled 时插入舞蹈，8–20 秒随机间隔、避免重复最近 4 个，不与对话和情绪动作争用。
+
+## 2026-09-24 14:50 摇 M5 无反应的修复
+- 原因一：没有进程在接收 M5 串口（测试脚本已退出、眼镜管线没跑），这是我交付时没留运行态。
+- 原因二（Kim 实摇日志证实）：摇晃判定过严（3 次 >1.1g/700ms），多数实摇只被记成左右倾；倾斜事件又占住队列把摇晃挤掉；Reachy 摆幅 ±13° 太小。
+- 修复：固件 2 次 >0.65g/800ms 即算摇、持续摇约每 0.9s 再报一次、摇动中不报倾斜（SHA256 85c26e9e…cbcd26，已实刷）；主机端摇晃优先、摇后 1.5s 内忽略倾斜，摆幅加大到最多 ±30°。
+- glasses_pipeline 等不到眼镜不再退出（此前 60s 超时退出连带把 M5 镜像一起关掉）。
+- 实测：Kim 手摇，14:50–14:53 日志记录十余次真实（非注入）摇晃被镜像到 Reachy，含 x 轴摇头与 z 轴晃动。眼镜当时未广播，未连上。

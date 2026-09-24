@@ -123,7 +123,14 @@ async def _run(args: argparse.Namespace) -> int:
     pipeline = Pipeline(Path(args.out), with_sound=not args.no_sound, m5=_m5(args))
     session, task = await _session(args, pipeline)
     try:
-        await session.wait_connected(timeout=args.timeout)
+        # Keep waiting: the M5 shake mirror runs in this process too, so giving
+        # up on the glasses would take Reachy's head shake down with it.
+        while True:
+            try:
+                await session.wait_connected(timeout=args.timeout)
+                break
+            except (TimeoutError, asyncio.TimeoutError, RuntimeError) as error:
+                logger.warning("glasses not up yet (%s); still waiting, M5 mirror stays on", error)
         print("Glasses linked. Press the shutter, or wait for the interval.", flush=True)
         if args.interval <= 0:
             print("Interval off: only photos the glasses push will be handled.", flush=True)
