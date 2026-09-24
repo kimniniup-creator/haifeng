@@ -308,3 +308,9 @@ and were deliberately not restarted here.
 - 实机验证：`near-field speech (score 0.00, rms 1506 vs floor 142); opening uplink`，未说唤醒词即开门。
 - 可调：REACHY_NEAR_ENABLED / REACHY_NEAR_RATIO / REACHY_NEAR_FLOOR_MIN。
 - 澄清用户疑问：9527 中转的 sk- key 仅用于眼镜视觉链路（gpt-5.6-sol，已跑通）；语音链路用的是本机既有 HF token 指向的 pollen-robotics-reachy-mini-realtime-url.hf.space，两者无关。语音无法改用该中转，因其无 realtime 模型且握手失败，已实测。
+
+## 2026-09-24 机器人重启后的断链与看门狗扩容
+- 用户反馈"说英文也不理我"。实据并非语音链路：应用日志每秒刷数十条 `Failed to set robot target: Lost connection with the server.`，daemon 自身 `state=error`、`error="Motor communication error! Check connections and power supply."`。用户随后说明 Reachy 刚被重启过。
+- 恢复动作：`POST /api/daemon/restart` → 约 6 秒后 `state=running`、`error=None`、`ready=true`；再 `POST /api/motors/set_mode/enabled`；重启对话应用重新接入。事后 `Lost connection` 计数归零，nb_error=0。
+- **看门狗扩容**：原先只覆盖对话应用静默卡死，daemon 掉了它管不着——而 daemon 一掉，应用表现同样是"听不见、不回应"，重启应用毫无用处。现新增 daemon 优先检查：`state==error` 时先 `daemon/restart`，等待回到 running 后自动 `motors/set_mode/enabled`，再重启应用；带冷却避免抖动。
+- 近场门控实机持续生效，多次记录如 `rms 2772 vs floor 120`、`rms 2015 vs floor 404`，地板随现场噪声自适应上浮。

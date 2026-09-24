@@ -30,6 +30,8 @@ USER_LINE = re.compile(r"role=user content=")
 ALIVE_LINE = re.compile(r"role=assistant|Turn latency|Tool call received")
 STAMP = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 
+DAEMON = "http://127.0.0.1:8000"
+
 
 def _stamp(line: str) -> Optional[float]:
     match = STAMP.match(line)
@@ -61,6 +63,50 @@ def scan(path: Path, tail_bytes: int = 400_000) -> tuple[Optional[float], Option
         if ALIVE_LINE.search(line):
             last_alive = when
     return last_user, last_alive
+
+
+def daemon_state() -> Optional[str]:
+    """The robot daemon's own view of itself, or None when unreachable."""
+    import json
+    import urllib.request
+
+    try:
+        request = urllib.request.Request(f"{DAEMON}/api/daemon/status")
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return str(json.loads(response.read().decode()).get("state"))
+    except Exception:
+        return None
+
+
+def revive_daemon() -> bool:
+    """Bring the robot backend out of an error state and re-enable the motors.
+
+    A Reachy power-cycle leaves the daemon in `error` with a motor
+    communication fault; the conversation app then floods with "Lost connection"
+    and answers nobody. Restarting the backend is the documented recovery and
+    does not touch firmware or calibration.
+    """
+    import urllib.request
+
+    def post(path: str) -> bool:
+        try:
+            request = urllib.request.Request(DAEMON + path, data=b"", method="POST")
+            with urllib.request.urlopen(request, timeout=30):
+                return True
+        except Exception as error:
+            print(f"  POST {path} failed: {error}", flush=True)
+            return False
+
+    if not post("/api/daemon/restart"):
+        return False
+    for _ in range(12):
+        time.sleep(3)
+        if daemon_state() == "running":
+            post("/api/motors/set_mode/enabled")
+            print("  daemon recovered, motors enabled", flush=True)
+            return True
+    print("  daemon did not come back to running", flush=True)
+    return False
 
 
 def restart() -> bool:
@@ -99,8 +145,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"restart when a heard user goes {args.grace:.0f}s unanswered", flush=True)
     last_restart = 0.0
 
+    last_daemon_fix = 0.0
+
     while True:
         time.sleep(args.poll)
+
+        # The robot backend first: a dead daemon makes the app look deaf, and
+        # restarting the app would not help.
+        state = daemon_state()
+        if state == "error" and time.time() - last_daemon_fix > args.cooldown:
+            print(f"[{datetime.now():%H:%M:%S}] daemon in error state - reviving", flush=True)
+            if revive_daemon():
+                restart()
+            last_daemon_fix = time.time()
+            time.sleep(20)
+            continue
+
         last_user, last_alive = scan(LOG)
         if last_user is None:
             continue
