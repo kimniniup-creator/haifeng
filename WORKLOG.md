@@ -289,3 +289,13 @@ and were deliberately not restarted here.
 - 新增 tools/conversation_watchdog.py：读应用自身日志，判据为"有用户完整发言（role=user content）但 grace 秒内无任何存活迹象（role=assistant / Turn latency / Tool call received）"，满足即重启应用。只有沉默不触发，避免安静时误杀。默认 grace 30s、轮询 5s、重启冷却 90s。
 - 回放验证：对 conversation.wedged.log（未回应 432s）与 conversation.prev2.log（38s）均正确判定需要重启。已在后台运行。
 - 用户判断当前转写方案不可行，要求调研成熟语音助手的唤醒/对话对象判定与上下文长度管理，已派子线程调研，结论待回。
+
+## 2026-09-24 调研结论与唤醒词门控落地
+- **中转不是 OpenAI**：config.py:69 指向 `pollen-robotics-reachy-mini-realtime-url.hf.space/session`，分配的是 huggingface/speech-to-speech 实例——VAD→STT→LLM→TTS 级联管线，只是对外说 Realtime 协议。据此修正此前多条判断。
+- **静默卡死根因（撤回 TTL 判断）**：该中转 `api/openai_realtime/llm_proxy.py` 用 `httpx.Timeout(None, connect=...)`，读取阶段无超时。上游 LLM 一停顿，该 handler 永久阻塞；STT 是独立 handler 所以转写照常，`response_pending` 标志永不清除，`websocket_router.py` 既无 ping/pong 也无空闲超时，服务端亦无看门狗。OpenAI 自身上限为 60 分钟，故 ~5 分钟不是 TTL。
+- **上下文长度无需处理**：中转 `runtime_config.py` 固定 `Chat(10)`，只保留 10 轮用户发言并按整轮淘汰（硬上限 2×size）。`conversation.item.delete` 未实现，`conversation.item.truncate` 是空操作。
+- **落地：唤醒词门控**（调研排名第一的方案）。新增 voice_gate/wake_gate.py：openWakeWord 0.6.0（ONNX、CPU、无 torch）+ 自带 silero VAD 抑制误触发，1 秒预滚缓冲在开门时回灌以免吃掉首词，命中后保持 8 秒并随说话延长，支持 open_now 按键说话与 close_now。
+- 拦截点选在应用自己的 `receive()`（huggingface_realtime.py:961，送 `input_audio_buffer.append` 之前）——音频已在手上，不必与应用争抢麦克风设备。任何异常一律放行原音频，坏掉的门控不能让机器人变聋。
+- 离线验证：2 秒环境噪声 0/50 帧放行；预滚封顶 1 秒；强制开启按时自动关闭；唤醒后放行 16640 样本（预滚 16000 + 当前帧 640）。接入后实测会话正常初始化，未说唤醒词时用户发言条数为 0（此前同等时间会产生大量乱码转写）。
+- patches/conversation_vad 已并入 patches/conversation_tuning，现含四项：VAD 参数、客户端打断开关、唤醒门控钩子、呼吸动画幅度。修掉两处补丁自身缺陷（`_os` 导入锚点、`from __future__` 必须置顶）。
+- 仍待做（调研建议 1/2）：在客户端对 `speech_stopped` 后 10 秒无 `response.created` 做进程内重连并回放上下文，替代当前的日志看门狗进程重启；WebSocket 加 ping_interval。

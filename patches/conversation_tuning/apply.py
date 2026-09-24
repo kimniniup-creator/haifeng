@@ -76,7 +76,49 @@ BARGE_PATCHED = """                        # Upstream flushes playback on every 
                             self._clear_queue()
 """
 
-# --- 3. idle breathing amplitude ---------------------------------------------
+# --- 3. wake-word gate on the microphone uplink -------------------------------
+
+HELPER_ORIGINAL = "logger = logging.getLogger(__name__)\n"
+
+HELPER_PATCHED = '''logger = logging.getLogger(__name__)
+
+
+def _wake_gate_feed(frame):
+    """Forward microphone audio only when the robot is actually addressed.
+
+    Returns the audio to send (with pre-roll on the opening frame), or None to
+    drop it. Any failure passes audio through unchanged: a broken gate must not
+    make the robot deaf. See voice_gate/wake_gate.py.
+    """
+    try:
+        import sys as _sys
+
+        # The app runs from <project>/conversation, so the project root is one up.
+        root = _os.getenv("REACHY_WAKE_GATE_ROOT") or _os.path.abspath("..")
+        if root not in _sys.path:
+            _sys.path.insert(0, root)
+        from voice_gate.wake_gate import gate
+
+        return gate().feed(frame)
+    except Exception:
+        logger.debug("wake gate unavailable; passing audio through", exc_info=True)
+        return frame
+'''
+
+WAKE_ORIGINAL = """        # Send to the realtime input buffer (guard against races during reconnect).
+"""
+
+WAKE_PATCHED = """        # Hold the uplink shut unless the robot was addressed, so a loud room
+        # cannot talk to the assistant on the user's behalf.
+        _gated = _wake_gate_feed(audio_frame)
+        if _gated is None:
+            return
+        audio_frame = _gated
+
+        # Send to the realtime input buffer (guard against races during reconnect).
+"""
+
+# --- 4. idle breathing amplitude ---------------------------------------------
 
 BREATH_ORIGINAL = """        self.breathing_z_amplitude = 0.005  # 5mm gentle breathing
         self.breathing_frequency = 0.1  # Hz (6 breaths per minute)
@@ -103,7 +145,12 @@ def _targets() -> List[Tuple[Path, List[Tuple[str, str]]]]:
     return [
         (
             root / "huggingface_realtime.py",
-            [(VAD_ORIGINAL, VAD_PATCHED), (BARGE_ORIGINAL, BARGE_PATCHED)],
+            [
+                (VAD_ORIGINAL, VAD_PATCHED),
+                (BARGE_ORIGINAL, BARGE_PATCHED),
+                (HELPER_ORIGINAL, HELPER_PATCHED),
+                (WAKE_ORIGINAL, WAKE_PATCHED),
+            ],
         ),
         (root / "moves.py", [(BREATH_ORIGINAL, BREATH_PATCHED)]),
     ]
