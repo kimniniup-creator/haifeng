@@ -219,3 +219,14 @@ readiness fix handles. A third full run on the restored environment completed in
 19.1s: curiosity -> [[0,6],[0,0]] -> motion completed, residual roll +0.003 rad.
 Voice 7860, pet_interaction 8091 and legacy bridge 8088 belong to other owners
 and were deliberately not restarted here.
+
+## 2026-09-24 客户端 DAEMON_TIMEOUT 排查
+- 现象：官方客户端显示 Connection timed out / DAEMON_TIMEOUT / connection: usb。
+- **机器人与 daemon 本身健康（实测）**：/api/daemon/status 返回 state=running、error=null；/api/state/motion-diagnostics 返回 stable_read=true 与真实 7 关节编码器值；控制环 32.7Hz、nb_error=0；COM11 存在且被 daemon 正常占用；近一小时 Windows 事件日志无任何 USB/CH343 断连。
+- **`backend_status.ready=false` 与 `last_alive=null` 是 1.8.0 的上报缺陷，不是故障**：1.8.0 的 RobotBackend.get_status() 只刷新 error 与 motor_control_mode，从不写回 ready/last_alive（构造值 False/None）；1.11.0 的同一函数才有 `self._status.ready = self.ready.is_set()...`。不要据此判定后端未就绪。
+- 客户端就绪判据（源码 useDaemonLifecycle.ts，commit f520136）只有两条：/api/daemon/status 的 state==='running'，且 /api/state/full 返回 200。10:07:16–10:08:18 连续 40 次采样两者全为 200。目标地址为 http://localhost:8000，本机解析正常。
+- UI 状态条里的 CAUSE 行不可信：源码注释说明它是「从启动日志里提取的最近一条像错误的行」，本次挑中的是一条 INFO（central_signaling_relay setPeerStatus）。
+- 曾存在 daemon 重启循环：10:03:43 与 10:06:07 各观测到一次干净退出（退出前 state=running、error=null、nb_error=0，无任何错误），端口空约 20 秒后由客户端重新拉起，周期约 55–60 秒。当前 PID 3420 已连续运行超过 150 秒，循环已停。判断为客户端启动重试耗尽后停在错误页，daemon 侧无过错。
+- 排除项：系统代理 ProxyEnable=0 且绕过 127.*；HuggingFace 0.4 秒可达、数据集缓存完好（--preload-datasets 不阻塞）；scripts/avast_ssl_fix.py 是 Pollen 官方自带的 SSLKEYLOGFILE 清理包装，非异常；health-check 3ms、status 4ms，远低于客户端 2000ms 超时。
+- **昨夜 AppData 目录丢失的连带损失已坐实**：目录于 2026-09-23 22:21 重建，.reachy_mini_spec 钉死 reachy-mini==1.8.0，故 SDK 由 1.11.0 退回 1.8.0（接口 81→68 个）；apps_venv 内只剩 reachy_mini，**对话应用 reachy_mini_conversation_app 已不存在**（7860 不再监听）；表情补丁随旧目录一并丢失。HF 缓存不在该目录，未受影响。
+- 未做：未重启客户端、未杀 daemon、未改 .reachy_mini_spec、未重装补丁、未启用电机或下发任何动作。
