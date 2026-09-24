@@ -35,6 +35,7 @@ DAEMON_PORT = 8000
 DAEMON = f"http://127.0.0.1:{DAEMON_PORT}"
 REALTIME_PORT = 8765
 APP_PORT = 7860
+DIARY_PORT = 8800
 
 FRESH = 60.0    # seconds: still mid-conversation
 STALE = 300.0   # seconds: long enough that something is probably wrong
@@ -305,6 +306,8 @@ def _collect() -> Dict[str, Any]:
         "glasses": {
             "photos": len(photos),
             "last_ago": _gap(photos[-1] if photos else None),
+            "diary_up": _listening(DIARY_PORT),
+            "diary_port": DIARY_PORT,
         },
     }
     data["verdict"] = verdict(data)
@@ -324,7 +327,7 @@ def snapshot() -> Dict[str, Any]:
 PAGE = """<!doctype html>
 <html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>海风 · 运行状态</title>
+<title>Reachy · 运行状态</title>
 <style>
  :root{--bg:#0f1115;--card:#171a21;--line:#262b36;--dim:#8b93a7;--ok:#3ddc97;
        --bad:#ff6b6b;--warn:#ffc857;--fg:#e8ecf4}
@@ -396,7 +399,7 @@ PAGE = """<!doctype html>
    .verdict .line{font-size:17px}
  }
 </style></head><body>
-<h1>海风 · 运行状态</h1>
+<h1>Reachy · 运行状态</h1>
 <div class="sub" id="clock">读取中…</div>
 <div class="verdict v-warn" id="verdict"><div class="line">读取中…</div></div>
 <div id="alarm"></div>
@@ -469,7 +472,7 @@ function draw(){
 
   const r = snap.robot, v = snap.voice, c = snap.camera, P = snap.ports;
   document.getElementById('alarm').innerHTML = r.desktop_client
-    ? '<div class="alarm">官方桌面客户端已接管机器人 —— 语音、动作、摄像头都拿不到它，先退出桌面客户端</div>'
+    ? '<div class="alarm">先退出官方桌面客户端，机器人才会交回来 —— 在那之前语音、动作、摄像头都是死的</div>'
     : '';
 
   document.getElementById('fresh').innerHTML =
@@ -497,13 +500,22 @@ function draw(){
     row('近几轮中位耗时', v.median===null ? gone('暂无') : v.median + ' 秒'),
   ]);
 
-  const cam = card('摄像头', [
+  // Two different eyes, and confusing them cost us an evening: the media
+  // device is Reachy's own camera, the photo count comes from the glasses.
+  const cam = card('Reachy 的摄像头', [
     row('媒体设备', !c.known ? gone() : dot(c.ok) + (c.ok ? '可用'
       : (c.no_media ? '未启用 no_media' : '被占用或已释放'))),
     row('机型', c.model ? esc(c.model) : gone()),
-    row('眼镜照片', snap.glasses.photos + ' 张'),
+    row('看到了什么', '见下方"最近几轮"里它自己描述的画面'),
+  ]);
+
+  const glasses = card('眼镜', [
+    row('今日照片', snap.glasses.photos + ' 张'),
     row('最近一张', snap.glasses.last_ago===null ? gone('从未')
       : (() => { const a = ago(snap.glasses.last_ago + drift); return a.n + ' ' + a.u; })()),
+    row('日记页', (snap.glasses.diary_up ? dot(true) : dot(false))
+      + '<a href="http://127.0.0.1:' + snap.glasses.diary_port + '/" target="_blank">127.0.0.1:'
+      + snap.glasses.diary_port + '</a>'),
   ]);
 
   let turns = '<div class="card wide"><h2>最近几轮</h2>';
@@ -523,7 +535,7 @@ function draw(){
   }
   turns += '</div></div>';
 
-  document.getElementById('grid').innerHTML = robot + voice + cam + turns;
+  document.getElementById('grid').innerHTML = robot + voice + cam + glasses + turns;
 }
 
 poll();

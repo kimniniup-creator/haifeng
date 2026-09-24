@@ -413,3 +413,4 @@ and were deliberately not restarted here.
 - 另派子线程制作面向观众的 Reachy 日记页（端口 8800，皮克斯 + Reachy 视觉语言）。
 - 日记页交付：http://127.0.0.1:8800（`start_diary.ps1` 启动）。`diary/diary_store.py` 暴露 `record(image, reading)`，眼镜链路在 `bridge/glasses_pipeline.py` 的 `Pipeline.handle` 里通过 `_remember()` 写入——该函数吞掉一切异常，日记存储出问题绝不会拖累机器人的反应。自测：写入 12 条并读回成功，测试条目已清除。
 - 当前整机状态：daemon 8000（1.11.0，desktop_app_daemon=false）、对话应用 7860、语音服务端 8765、状态面板 8770、日记页 8800，全部在线；面板判定"整套都在跑"。
+- 面板收尾：标题里的"海风"按要求去掉，改为 Reachy；摄像头卡拆成两张——"Reachy 的摄像头"只讲机器人自己的媒体设备，"眼镜"讲眼镜链路的照片与日记页，并把 8800 纳入端口监测（子线程交付时也独立指出过这两者被混在一起）。双视口截图已过：390 与 1400 均无横向溢出。
