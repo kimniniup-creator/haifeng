@@ -255,3 +255,15 @@ and were deliberately not restarted here.
 - 数据集结论：挥手不需要数据集与训练。若要扩手势词表，HaGRID（静态 18 类）在 HF 有多个镜像；动态类（Jester）需单独获取。已向用户说明。
 - 工具启用需带 Origin 头调 RPC（应用对 WebSocket 有 Origin 校验，否则 403）。face_memory 与 gesture_watch 均已在 default 人格启用并进入实时会话工具表。
 - 待用户现场验收：挥手识别、头部跟手、人脸录入；眼镜快门主动推送。
+
+## 2026-09-24 接入 9527 中转（gpt-5.6-sol）与眼镜→Agent→Reachy 闭环
+- 用户提供 newapi 中转（https://9527.codes）与 key，要求把 Reachy 的后端回答模型换成 gpt-5.6-sol。凭据写入项目 .env（已被 gitignore），未回显、未提交。
+- **授权检查通过**：/v1/models 返回 200、53 个模型，gpt-5.6-sol 存在；chat/completions 实测可用。
+- **但 realtime 不可用（实测证据）**：模型列表中无任何 realtime 模型；连 wss://9527.codes/v1/realtime 中转虽接受连接，首帧即返回 `dial failed to wss://***: websocket: bad handshake`。对话应用走的是 OpenAI Realtime 协议（语音进语音出 + 服务端 VAD + 工具调用），因此**语音后端无法直接替换**，已向用户说明并给出取舍。语音侧仍用 HF realtime。
+- **Cloudflare 1010 坑**：带图请求被拦，纯文本不受影响；根因是默认 urllib User-Agent。改用 openai SDK（自带 UA）后恢复。已写进 scene_agent 的模块注释，避免再踩。
+- **gpt-5.6-sol 视觉可用**：真实抓拍图 4.4s 返回准确描述。
+- 新增 bridge/scene_agent.py：图片 → 结构化读数 {scene, emotion, intensity, confidence, utterance}。情绪词表固定 8 类，**动作映射留在代码里，模型不指定动作名**，换动作库不必改提示词。置信度 <0.5 不演绎，退回 attentive1。缩图上限长边 768/质量 78（619KB → 40KB）。
+- 新增 bridge/glasses_pipeline.py：LumaSession 常驻链路 + scene_agent，串行化反应（间隔 ≥8s）。`once` 单次全链路，`run` 常驻（--interval 0 时只等眼镜主动推图）。
+- **端到端实测通过**：眼镜拍照 7088 字节 → 分析 9.6–11.5s → 动作 HTTP 200 + 配音 HTTP 200。两次测试照片均偏暗模糊，模型 confidence 0.18，系统正确退回 attentive1 未硬演——置信度门槛按设计生效。
+- 修掉 _sound_path 静默失败：.venv 缺 huggingface_hub 导致配音查找返回 None 而无报错。已安装，并增加不依赖该包的 HF 缓存路径兜底。
+- 待现场验收：戴上眼镜对有内容的场景拍照的实际表现；眼镜自身快门是否主动推图（bridge.luma_daemon listen）。
