@@ -74,6 +74,8 @@ class WakeGate:
         self._vad = None
         self._pending = np.zeros(0, dtype=np.int16)
         self._preroll: deque[np.ndarray] = deque()
+        # Pre-roll waiting to go upstream, one normal-sized frame per call.
+        self._replay: deque[np.ndarray] = deque()
         self._preroll_samples = 0
         self._open_until = 0.0
         self._last_wake = 0.0
@@ -87,6 +89,15 @@ class WakeGate:
         self.last_rms = 0.0
         self.noise_floor = 0.0
         self._rms_history: deque[float] = deque(maxlen=375)  # ~30 s of 80 ms chunks
+        self._last_report = 0.0
+        # Test injection: drop a WAV in via REACHY_GATE_INJECT_WAV and touch
+        # the trigger file to feed it upstream as if it were the microphone.
+        self.inject_wav = os.getenv('REACHY_GATE_INJECT_WAV', '')
+        self.inject_trigger = os.getenv('REACHY_GATE_INJECT_TRIGGER', '')
+        self._inject: Optional[np.ndarray] = None
+        self._inject_at = 0
+        self._inject_check = 0.0
+        self.report_every_s = _env_float("REACHY_GATE_REPORT_S", 0.0)
         self.error: Optional[str] = None
 
     # ---- lifecycle ----------------------------------------------------------
@@ -154,15 +165,20 @@ class WakeGate:
     # ---- the gate ------------------------------------------------------------
 
     def feed(self, frame: np.ndarray) -> Optional[np.ndarray]:
-        """Take one mic frame; return what should go upstream, or None.
+        """Take one mic frame and return what should go upstream.
 
-        On the frame that opens the gate the buffered pre-roll is prepended, so
-        the wake phrase and the words right after it are not lost.
+        While shut this returns silence rather than nothing: the uplink has to
+        stay continuous or the upstream turn detector never sees a pause and
+        never commits a turn. On opening, the buffered pre-roll is released one
+        frame at a time so the first words are kept without a size spike.
         """
         if not self.enabled or not self._ensure_loaded():
             return frame
 
         now = time.time()
+        injected = self._injected(frame)
+        if injected is not None:
+            return injected
         speech = self._score(frame)
 
         with self._lock:
@@ -175,6 +191,11 @@ class WakeGate:
                 if speech:
                     self._open_until = now + self.hold_s
                 self.frames_passed += 1
+                if self._replay:
+                    # Still catching up on pre-roll; keep the queue moving one
+                    # frame at a time so the uplink stays in real order.
+                    self._replay.append(frame)
+                    return self._replay.popleft()
                 return frame
 
             if self._woke or self._near:
@@ -186,17 +207,29 @@ class WakeGate:
                 self._woke = False
                 self._near = False
                 self._open_until = now + self.hold_s
-                flushed = self._drain_preroll()
+                # Release the pre-roll over the following frames instead of one
+                # large append: upstream VAD sees a steady frame size, and a
+                # sudden one-second packet cannot disturb its turn detection.
+                self._replay.extend(self._preroll)
+                self._preroll.clear()
+                self._preroll_samples = 0
                 self.frames_passed += 1
                 logger.info(
-                    "%s (score %.2f, rms %.0f vs floor %.0f); opening uplink",
+                    "%s (score %.2f, rms %.0f vs floor %.0f); opening uplink, "
+                    "%d pre-roll frames queued",
                     reason, self.last_score, self.last_rms, self.noise_floor,
+                    len(self._replay),
                 )
-                return np.concatenate([flushed, frame]) if flushed.size else frame
+                self._replay.append(frame)
+                return self._replay.popleft()
 
+            self._replay.clear()
             self._remember(frame)
             self.frames_dropped += 1
-            return None
+            # Silence, not nothing. The upstream turn detector needs to hear the
+            # pause to decide a turn ended; dropping frames entirely leaves it
+            # waiting forever, so partial transcripts arrive but never commit.
+            return np.zeros_like(frame)
 
     # ---- internals -----------------------------------------------------------
 
@@ -233,6 +266,18 @@ class WakeGate:
 
             rms = float(np.sqrt(np.mean(chunk.astype(np.float32) ** 2)))
             self.last_rms = rms
+
+            # Optional heartbeat so the gate can be tuned against a real room
+            # without guessing what the microphone is actually receiving.
+            if self.report_every_s > 0:
+                now = time.time()
+                if now - self._last_report >= self.report_every_s:
+                    self._last_report = now
+                    logger.info(
+                        "gate heartbeat: rms=%.0f floor=%.0f need=%.0f speech=%.2f wake=%.2f open=%s",
+                        rms, self.noise_floor, self.noise_floor * self.near_ratio,
+                        speech_probability, best, self.is_open,
+                    )
             # Only quiet chunks teach the floor, or a long speech burst would
             # raise the bar until nothing can clear it.
             if not is_speech:
@@ -249,6 +294,46 @@ class WakeGate:
                 self._last_wake = time.time()
                 self._woke = True
         return heard_speech
+
+
+    def _injected(self, frame: np.ndarray) -> Optional[np.ndarray]:
+        """Feed a test WAV upstream in place of the microphone, when armed."""
+        if not self.inject_wav or not self.inject_trigger:
+            return None
+        now = time.time()
+        if self._inject is None:
+            if now - self._inject_check < 1.0:
+                return None
+            self._inject_check = now
+            trigger = os.path.exists(self.inject_trigger)
+            if not trigger:
+                return None
+            try:
+                import wave
+
+                with wave.open(self.inject_wav, "rb") as handle:
+                    raw = handle.readframes(handle.getnframes())
+                self._inject = np.frombuffer(raw, dtype=np.int16).copy()
+                self._inject_at = 0
+                os.remove(self.inject_trigger)
+                logger.info("injecting %d samples from %s", self._inject.size, self.inject_wav)
+            except Exception as error:
+                logger.warning("injection failed: %s", error)
+                self._inject = None
+                return None
+
+        size = frame.size
+        chunk = self._inject[self._inject_at : self._inject_at + size]
+        self._inject_at += size
+        if chunk.size < size:
+            padded = np.zeros(size, dtype=np.int16)
+            padded[: chunk.size] = chunk
+            chunk = padded
+        if self._inject_at >= self._inject.size:
+            logger.info("injection finished")
+            self._inject = None
+        self.frames_passed += 1
+        return chunk
 
     def _remember(self, frame: np.ndarray) -> None:
         self._preroll.append(frame)

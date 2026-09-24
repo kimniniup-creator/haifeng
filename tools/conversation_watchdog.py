@@ -28,9 +28,19 @@ LAUNCHER = ROOT / "start_conversation.ps1"
 # user finished a turn, so only committed ones count.
 USER_LINE = re.compile(r"role=user content=")
 ALIVE_LINE = re.compile(r"role=assistant|Turn latency|Tool call received")
+# Proof we are actually sending audio upstream right now.
+SENDING_LINE = re.compile(r"opening uplink|open=True")
+# Any sign the relay is still processing what we send. Partial transcripts count:
+# they arrive long before a turn completes, so their absence means it went deaf.
+RELAY_LINE = re.compile(r"role=user|role=assistant|Turn latency")
 STAMP = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 
+# Survives across ticks without threading it through every signature.
+_state = {"memory_mark": 0}
+
 DAEMON = "http://127.0.0.1:8000"
+MEMORY = ROOT / "conv-env" / "Lib" / "site-packages" / "reachy_mini_conversation_app" / "memory.v1.json"
+REPLY_LINE = re.compile(r"role=assistant content=")
 
 
 def _stamp(line: str) -> Optional[float]:
@@ -43,17 +53,17 @@ def _stamp(line: str) -> Optional[float]:
         return None
 
 
-def scan(path: Path, tail_bytes: int = 400_000) -> tuple[Optional[float], Optional[float]]:
-    """Return (last user turn, last sign of life) as timestamps."""
+def scan(path: Path, tail_bytes: int = 400_000) -> tuple[Optional[float], ...]:
+    """Return timestamps for (last user turn, last reply, last send, last relay sign)."""
     try:
         with path.open("rb") as handle:
             handle.seek(0, 2)
             handle.seek(max(0, handle.tell() - tail_bytes))
             text = handle.read().decode("utf-8", errors="replace")
     except OSError:
-        return None, None
+        return None, None, None, None
 
-    last_user = last_alive = None
+    last_user = last_alive = last_send = last_relay = None
     for line in text.splitlines():
         when = _stamp(line)
         if when is None:
@@ -62,7 +72,41 @@ def scan(path: Path, tail_bytes: int = 400_000) -> tuple[Optional[float], Option
             last_user = when
         if ALIVE_LINE.search(line):
             last_alive = when
-    return last_user, last_alive
+        if SENDING_LINE.search(line):
+            last_send = when
+        if RELAY_LINE.search(line):
+            last_relay = when
+    return last_user, last_alive, last_send, last_relay
+
+
+def clear_memory() -> int:
+    """Drop stored facts so long sessions cannot accumulate stale memory."""
+    import json
+
+    try:
+        data = json.loads(MEMORY.read_text(encoding="utf-8"))
+        count = len(data.get("facts", []))
+        if not count:
+            return 0
+        MEMORY.write_text(
+            json.dumps({"version": 1, "facts": []}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return count
+    except (OSError, ValueError):
+        return 0
+
+
+def count_replies(path: Path, tail_bytes: int = 400_000) -> int:
+    """How many assistant turns the current log holds."""
+    try:
+        with path.open("rb") as handle:
+            handle.seek(0, 2)
+            handle.seek(max(0, handle.tell() - tail_bytes))
+            text = handle.read().decode("utf-8", errors="replace")
+    except OSError:
+        return 0
+    return sum(1 for line in text.splitlines() if REPLY_LINE.search(line))
 
 
 def daemon_state() -> Optional[str]:
@@ -121,13 +165,23 @@ def restart() -> bool:
     except (OSError, ValueError):
         pass
     time.sleep(3)
-    result = subprocess.run(
-        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(LAUNCHER)],
-        check=False, capture_output=True, text=True, timeout=120,
-    )
-    ok = result.returncode == 0
-    print(f"  restart {'ok' if ok else 'FAILED'}: {(result.stdout or result.stderr).strip()[:160]}",
-          flush=True)
+    # Never capture the launcher's output: it uses Start-Process, whose detached
+    # child inherits the pipe, so communicate() waits for an EOF that never
+    # comes and the watchdog kills itself on the timeout.
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(LAUNCHER)],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=90,
+        )
+        ok = result.returncode == 0
+    except subprocess.TimeoutExpired:
+        # The launcher spawns and returns; a timeout here means it is still
+        # holding the console, not that the app failed to start.
+        ok = True
+    except Exception as error:
+        print(f"  restart failed: {error}", flush=True)
+        return False
+    print(f"  restart {'ok' if ok else 'returned non-zero'}", flush=True)
     return ok
 
 
@@ -139,6 +193,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--poll", type=float, default=5.0)
     parser.add_argument("--cooldown", type=float, default=90.0,
                         help="minimum seconds between restarts")
+    parser.add_argument("--memory-turns", type=int, default=20,
+                        help="clear stored memory facts every N assistant turns; 0 disables")
+    parser.add_argument("--deaf-grace", type=float, default=60.0,
+                        help="seconds of streaming audio with no relay activity at all")
     args = parser.parse_args(argv)
 
     print(f"watching {LOG}", flush=True)
@@ -149,35 +207,72 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     while True:
         time.sleep(args.poll)
+        try:
+            last_restart, last_daemon_fix = _tick(args, last_restart, last_daemon_fix)
+        except Exception as error:
+            # The watchdog is the safety net; it must outlive any single failure.
+            print(f"[{datetime.now():%H:%M:%S}] tick failed: {error!r}", flush=True)
 
-        # The robot backend first: a dead daemon makes the app look deaf, and
-        # restarting the app would not help.
-        state = daemon_state()
-        if state == "error" and time.time() - last_daemon_fix > args.cooldown:
-            print(f"[{datetime.now():%H:%M:%S}] daemon in error state - reviving", flush=True)
-            if revive_daemon():
-                restart()
-            last_daemon_fix = time.time()
-            time.sleep(20)
-            continue
 
-        last_user, last_alive = scan(LOG)
-        if last_user is None:
-            continue
+def _tick(args, last_restart: float, last_daemon_fix: float) -> tuple[float, float]:
+    """One check round. Returns the updated restart timestamps."""
+    # The robot backend first: a dead daemon makes the app look deaf, and
+    # restarting the app would not help.
+    state = daemon_state()
+    if state == "error" and time.time() - last_daemon_fix > args.cooldown:
+        print(f"[{datetime.now():%H:%M:%S}] daemon in error state - reviving", flush=True)
+        if revive_daemon():
+            restart()
+        last_daemon_fix = time.time()
+        time.sleep(20)
+        return last_restart, last_daemon_fix
 
-        answered = last_alive is not None and last_alive >= last_user
-        unanswered_for = time.time() - last_user
-        if answered or unanswered_for < args.grace:
-            continue
-        if time.time() - last_restart < args.cooldown:
-            continue
+    # Memory is deliberately short-lived: refresh it every so many turns so a
+    # long session never carries stale facts forward.
+    turns = count_replies(LOG)
+    if args.memory_turns > 0 and turns - _state["memory_mark"] >= args.memory_turns:
+        dropped = clear_memory()
+        _state["memory_mark"] = turns
+        if dropped:
+            print(f"[{datetime.now():%H:%M:%S}] {turns} turns - cleared {dropped} memory facts",
+                  flush=True)
 
-        print(f"[{datetime.now():%H:%M:%S}] user unanswered for {unanswered_for:.0f}s "
-              f"- session looks dead, restarting", flush=True)
+    last_user, last_alive, last_send, last_relay = scan(LOG)
+
+    # Deaf session: we are streaming audio upstream and getting nothing
+    # back at all - not even a partial transcript. The heard-but-unanswered
+    # check below cannot see this, because no transcript ever arrives.
+    if (
+        last_send is not None
+        and time.time() - last_send < args.deaf_grace
+        and (last_relay is None or time.time() - last_relay > args.deaf_grace)
+        and time.time() - last_restart > args.cooldown
+    ):
+        quiet = time.time() - last_relay if last_relay else float("inf")
+        print(f"[{datetime.now():%H:%M:%S}] sending audio but relay silent for "
+              f"{quiet:.0f}s - restarting", flush=True)
         restart()
         last_restart = time.time()
-        # Give the new session time to announce itself before judging it again.
         time.sleep(20)
+        return last_restart, last_daemon_fix
+
+    if last_user is None:
+        return last_restart, last_daemon_fix
+
+    answered = last_alive is not None and last_alive >= last_user
+    unanswered_for = time.time() - last_user
+    if answered or unanswered_for < args.grace:
+        return last_restart, last_daemon_fix
+    if time.time() - last_restart < args.cooldown:
+        return last_restart, last_daemon_fix
+
+    print(f"[{datetime.now():%H:%M:%S}] user unanswered for {unanswered_for:.0f}s "
+          f"- session looks dead, restarting", flush=True)
+    restart()
+    last_restart = time.time()
+    # Give the new session time to announce itself before judging it again.
+    time.sleep(20)
+    return last_restart, last_daemon_fix
 
 
 if __name__ == "__main__":

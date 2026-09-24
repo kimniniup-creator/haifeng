@@ -314,3 +314,14 @@ and were deliberately not restarted here.
 - 恢复动作：`POST /api/daemon/restart` → 约 6 秒后 `state=running`、`error=None`、`ready=true`；再 `POST /api/motors/set_mode/enabled`；重启对话应用重新接入。事后 `Lost connection` 计数归零，nb_error=0。
 - **看门狗扩容**：原先只覆盖对话应用静默卡死，daemon 掉了它管不着——而 daemon 一掉，应用表现同样是"听不见、不回应"，重启应用毫无用处。现新增 daemon 优先检查：`state==error` 时先 `daemon/restart`，等待回到 running 后自动 `motors/set_mode/enabled`，再重启应用；带冷却避免抖动。
 - 近场门控实机持续生效，多次记录如 `rms 2772 vs floor 120`、`rms 2015 vs floor 404`，地板随现场噪声自适应上浮。
+
+## 2026-09-24 可对话性的量化自测
+- 用户要求"必须听得懂英文、能完整流畅对话，自己测"。服务存活不等于能对话，故新建 tools/conversation_probe.py：用合成语音经门控注入通道送入（与麦克风同一条路径），等待"已提交转写 + 助手回复"，按轮报告成败。配套 tools/synthesize_phrase.ps1（SAPI，16kHz 单声道）。
+- 门控新增注入通道（REACHY_GATE_INJECT_WAV + TRIGGER 文件），仅在配置时启用，用于绕开声学路径自测。此前用电脑扬声器外放的声学测试无效：默认播放设备疑似 Reachy 自身，被回声消除抵消，麦克风收不到。
+- **修掉一个我自己引入的严重缺陷**：门控关闭时返回 None（完全不发送）。服务端 VAD 需要"听到静音"才能判定一轮结束，被我掐掉后它永远等不到结束——表现为只有零星 partial、永不提交完整转写、更无回应。改为关闭时发送等长静音帧，音频流保持连续。离线验证：200 帧全部为静音、无 None、帧长恒为 160。
+- 另修：开门那一帧原本把 1 秒预滚与当前帧拼成 16640 样本的大包一次性上传，与平时 160 样本差异悬殊，可能扰乱上游 VAD。改为按正常帧大小逐帧吐出，关门时清空未吐完的队列。
+- **修掉看门狗自杀**：restart() 用 capture_output=True 调用启动脚本，而脚本里 Start-Process 派生的子进程继承管道句柄，communicate() 永远等不到 EOF，120 秒后抛 TimeoutExpired 直接杀死看门狗——它在第一次真正救场时就死了。改为不捕获输出、超时视为已启动，并把整个循环体包进 try/except，保证看门狗比任何单次失败活得久。实测连续两次触发（12:23:21、12:24:58）均成功重启且自身存活。
+- 看门狗新增两项：daemon 处于 error 时先恢复机器人后端并重新使能电机；以及"正在发送音频但中转完全无响应"的聋检测（原判据要求先有完整转写，转写整体停摆时反而不触发）。
+- **实测结论（三次探测）**：0/4、0/4、1/3。唯一成功的一轮：问"蜘蛛有几条腿"，回答"Eight"，耗时 22 秒——链路本身是通的。失败集中在"完全未被转写"与"已转写但 LLM 级无回应"，与调研指出的中转 LLM 代理无读取超时一致。工具从 17 精简到 7 再恢复到 16，对成功率无改善，排除工具数量为主因。
+- 按用户决定调整：新建 user_personalities/reachy_tuned（复制 default 全文与 Aiden 音色，不改人设），加入两条约束——web_search 默认不调用（除非用户明确要求查网），以及记忆为短期不可依赖；移除 idle_do_nothing；其余工具保留。看门狗每 20 轮助手发言清空一次 memory.v1.json。
+- VAD 按"交互优先、暂不要求准确度"设为 threshold 0.2、允许打断、silence 600ms、近场倍数降至 1.8。
