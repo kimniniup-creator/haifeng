@@ -230,3 +230,16 @@ and were deliberately not restarted here.
 - 排除项：系统代理 ProxyEnable=0 且绕过 127.*；HuggingFace 0.4 秒可达、数据集缓存完好（--preload-datasets 不阻塞）；scripts/avast_ssl_fix.py 是 Pollen 官方自带的 SSLKEYLOGFILE 清理包装，非异常；health-check 3ms、status 4ms，远低于客户端 2000ms 超时。
 - **昨夜 AppData 目录丢失的连带损失已坐实**：目录于 2026-09-23 22:21 重建，.reachy_mini_spec 钉死 reachy-mini==1.8.0，故 SDK 由 1.11.0 退回 1.8.0（接口 81→68 个）；apps_venv 内只剩 reachy_mini，**对话应用 reachy_mini_conversation_app 已不存在**（7860 不再监听）；表情补丁随旧目录一并丢失。HF 缓存不在该目录，未受影响。
 - 未做：未重启客户端、未杀 daemon、未改 .reachy_mini_spec、未重装补丁、未启用电机或下发任何动作。
+
+## 2026-09-24 绕开客户端：自有 daemon + 对话应用 + 人脸记忆
+- 用户指示：不走官方客户端，找最短路径实现表情映射；随后要求恢复语音助手、保留英文 default 人格（音色 Aiden）、删除海风人格、并让摄像头记住人脸与声纹。
+- **自有 daemon 跑通**：reachy-env 1.11.0，media 开启，`ready=true`、`error=null`、`nb_error=0`、控制环 32Hz、电机 enabled。新增 start_robot_media.ps1（相对 start_robot.ps1 去掉 --no-media）。
+- **表情映射实测通过**：原生路由无补丁，welcoming1 不再 500。laughing1 实测轨迹真实：触角在 0.17↔0.37 往复、body_yaw 变化 0.164 rad、头部 z 起伏 10.8mm，总幅度 0.336 rad；触角读数回到 [-0.3,0.5] 正常区间（此前 ±2.9 是未唤醒状态的异常值）。
+- **摄像头首次验证通过**：get_frame_jpeg 连续出帧，1920×1080，均值 56.3 标准差 41.3，肉眼确认为清晰真实成像（此前多轮只拿到近灰帧/超时）。
+- **音频验收闭环**：官方对话应用实时对话中，麦克风转写与 TTS 播放均正常，首个音频 delta 在用户转写后 930ms。扬声器可闻性问题就此解决，不再是待验证项。
+- **对话应用脱离客户端运行**：从 HF 缓存的 Space 源码装入独立 conv-env，start_conversation.ps1 启动，UI 127.0.0.1:7860，JSON-RPC ws://127.0.0.1:7860/rpc。复用本机既有 HF token（未回显、未提交）。
+- 人格：按用户要求保留内置 default（英文，音色 Aiden）。海风人格已按指示删除（conv-env 内、conversation/external_content、以及 config/conversation/haifeng 全部删净），.env 中 REACHY_MINI_CUSTOM_PROFILE 已移除，startup 现为 default。
+- **新增 bio_tools/face_memory.py**：官方外部工具机制（REACHY_MINI_EXTERNAL_TOOLS_DIRECTORY + AUTOLOAD_EXTERNAL_TOOLS）。YuNet 检测 + SFace 识别，均走 opencv-python 内置 API，模型来自 HF 的 OpenCV Zoo 官方镜像。支持 enrol / identify / list / forget，录入取 7 帧平均，余弦阈值 0.363（0.28–0.363 报"不确定"而非猜名字）。只存 128 维特征到 data/face_db.json，不存照片，不出本机。
+- 离线验证：在真实抓拍图上检测到 1 张人脸、对齐 112×112、128 维归一化 embedding、自相似度 1.0、随机向量 0.173。应用侧日志确认 `Loaded external tool: face_memory` 且已进入实时会话工具表。实机语音录入待用户验收。
+- **声纹未做**：整个栈内无说话人识别能力，音频只有 DOA 与 VAD；且麦克风被对话应用独占，需另起采集通道与说话人 embedding 模型。已向用户说明，等确认后再做。
+- 未动：官方客户端未重启（当前未运行）；patches/reachy_expression 保留未安装（客户端旁路后不生效）。

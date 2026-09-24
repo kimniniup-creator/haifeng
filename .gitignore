@@ -15,3 +15,5 @@ upstream/*/.git/
 qa-artifacts/
 .env.*
 !.env.example
+conv-env/
+conversation/
