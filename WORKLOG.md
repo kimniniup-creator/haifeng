@@ -378,3 +378,10 @@ and were deliberately not restarted here.
 - **摄像头接通**：应用把照片作为独立的 `input_image` 会话项回传，此前被 _text_of 整个丢弃。新增 _content_of 保留图像块，并在历史含图时自动切到 REACHY_VISION_MODEL（gpt-5.6-sol），纯文本轮仍用更快的 gpt-5.5；只保留最新一张图，旧图降级为文字占位避免拖慢。
 - 同时修：模型只返回工具调用、文本为空时会完全不出声；现在文本为空则不带工具再问一次，保证"动作与话同时有"。
 - robot_guard 增加"daemon 恢复后重启对话应用"——仅恢复 daemon 不够，应用的 SDK 连接不会重连且麦克风管线挂在该连接上，USB 掉线后表现即为"完全听不见"。
+
+## 2026-09-24 15:10 M5 与 Reachy 行为完全对应（Kim 反馈：点头不对、屏幕总是哈哈）
+- 手势改用陀螺仪判定：左右转=no、前后点=yes、扭转=dizzy；平移式晃动退回加速度计。轴→含义可由主机经 imu_config 下发（仅 RAM），环境变量 M5_GYRO_MAP / M5_ACCEL_MAP，默认 gyro "ynd"、accel "nyy"，待 Kim 实测后按日志 axis/src/energy 校准。
+- M5 屏幕：no 角色左右摆头 + 红色 NO；yes 闭眼点头 + 绿色 YES；侧倾/侧键 B 歪头 + 青色 ?；dizzy 结束不再接大笑。哈哈只留给照片回复和三连戳。B 双击=重看上条照片。
+- 固件对每个用户触发的状态发 m5_action（giggle/hop/laugh/pat_start/pat_end/question/replay/no/yes/dizzy/tilt_left/tilt_right/wake/sleep/menu_open/menu_next/snack/dance/miss/photo_demo/pat_demo）。
+- 主机 bridge/m5_motion.py 逐一映射：快手势用 goto（头+天线），情绪类复用 EMOTION_MAP（三连戳=joy 强档，侧键?=curiosity 中档，重看=上张照片的同一个动作），菜单卡 snack→grateful1、dance→dance1、miss→loving1、sleep→sleep1；长按 A 期间 Reachy 一直低头被摸，松手咯咯笑。
+- 实机（USB 注入）逐项核对 M5 模式 / 事件 / Reachy 实测：no yaw 幅度 24°、yes pitch 11°、dizzy roll 13°、tilt roll 17–22°+天线、戳一下天线 33°、侧键播 inquiring1。固件 SHA256 96ce53a0…，已实刷。

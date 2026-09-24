@@ -24,7 +24,7 @@ from bridge.scene_agent import react
 from bridge.luma_ble import LumaBleError
 from bridge.luma_daemon import LumaSession
 from bridge.m5_link import M5Link
-from bridge.m5_motion import ReachyMirror
+from bridge.m5_motion import ReachyMirror, configure
 
 
 logger = logging.getLogger(__name__)
@@ -186,7 +186,10 @@ def _m5(args: argparse.Namespace) -> M5Link | None:
     if not getattr(args, "no_m5_motion", False):
         # Shake the M5, Reachy shakes its head: needs the port open from the start.
         link.listeners.append(ReachyMirror().handle)
-        if not link.connect():
+        link.listeners.append(lambda m: m.get("type") == "m5_action" and logger.info("M5 did: %s", m))
+        if link.connect():
+            configure(link)
+        else:
             logger.warning("M5 not found; photos still go to Reachy")
     return link
 
