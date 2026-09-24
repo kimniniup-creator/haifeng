@@ -267,3 +267,16 @@ and were deliberately not restarted here.
 - **端到端实测通过**：眼镜拍照 7088 字节 → 分析 9.6–11.5s → 动作 HTTP 200 + 配音 HTTP 200。两次测试照片均偏暗模糊，模型 confidence 0.18，系统正确退回 attentive1 未硬演——置信度门槛按设计生效。
 - 修掉 _sound_path 静默失败：.venv 缺 huggingface_hub 导致配音查找返回 None 而无报错。已安装，并增加不依赖该包的 HF 缓存路径兜底。
 - 待现场验收：戴上眼镜对有内容的场景拍照的实际表现；眼镜自身快门是否主动推图（bridge.luma_daemon listen）。
+
+## 2026-09-24 用户反馈三问的实据定位与修正
+- 用户反馈：动作看不出针对场景、触角一直晃；它老听不到、不回应；人脸仍未记住。逐条查证据，结论与此前判断有出入，已修正。
+- **触角一直晃 ≠ 我的手势模块**。实据：日志中 `Tool call received` 计数为 0，face_memory 与 gesture_watch **从未被调用过**，手势监视器根本没启动。真凶是上游 moves.py 的 `BreathingMove`：`antenna_sway_amplitude=15°`、`antenna_frequency=0.5Hz`、`duration=inf`，任何动作结束 0.3 秒后就无限摆动。idle_policy（3 分钟一次随机 Dance/PlayEmotion）是次要因素，不是持续晃的原因。
+- **上一版 VAD 补丁没治到根，且矫枉过正**。打断由 huggingface_realtime.py 收到 `input_audio_buffer.speech_started` 后直接调 `_clear_queue()` 触发，与 `interrupt_response` 参数无关——所以关闭打断参数后仍有 50 次清空播放队列。同时 threshold 从默认拉到 0.85 过高，导致听不到用户说话。两个问题叠加：既听不见、又自己把话掐断。
+- 旧 patches/conversation_vad 已回滚并删除，替换为 patches/conversation_tuning（同时改两个文件，各自 .orig 备份，带 --rollback）：
+  - VAD 参数可配，默认 threshold 0.6 / silence 700ms / prefix 300ms（不再是 0.85）
+  - `speech_started` 的清队列改为受 `REACHY_VAD_INTERRUPT` 控制，默认关闭——这才是真正堵住自我打断的地方
+  - 呼吸动画可配，默认触角 ±4°、0.25Hz，z 轴 3mm；`REACHY_BREATH_ANTENNA_DEG=0` 可完全静止
+- 补丁自身修掉两处：`import os as _os` 的锚点在 moves.py 不存在导致运行时 `name '_os' is not defined`（呼吸启动失败）；改为通用插入并跳过 `from __future__`（否则 SyntaxError）。已加运行时校验，避免"能编译但运行炸"。
+- **实测验收**：重启后无报错，打断次数 0；触角摆幅由设计值峰峰 30° 降到实测 **6.1°**（12 秒采样）。情绪动作摆幅 17°+，现在可与待机动画区分。
+- 人脸仍未录入的原因就是上面的"轮次被掐断"，工具从未被触发；两个外部工具在 default 人格下均已启用并在实时工具表中。待用户重试。
+- 语音后端维持现状（用户确认）。注意转写语言锁定 en，用户若说中文会被转写成英文乱码。
