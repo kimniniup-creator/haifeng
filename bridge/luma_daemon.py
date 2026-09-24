@@ -45,8 +45,16 @@ except ImportError:  # pragma: no cover - exercised only without bleak
 logger = logging.getLogger(__name__)
 
 RECONNECT_MIN_S = 2.0
-RECONNECT_MAX_S = 30.0
+RECONNECT_MAX_S = 10.0
 IDLE_POLL_S = 0.5
+
+# These glasses advertise in bursts rather than continuously: a 25 s scan saw 34
+# advertisements, while several 8 s scans minutes apart saw none at all. Waiting
+# between short scans is therefore the wrong shape - the radio has to be
+# listening when a burst happens. Scan for longer than luma_ble's one-shot
+# default and keep the gap between scans small, so the session listens for most
+# of the time it spends reconnecting instead of about a fifth of it.
+SCAN_WINDOW_S = 20.0
 
 ImageHandler = Callable[[bytes], Awaitable[None]]
 
@@ -102,7 +110,7 @@ class LumaSession:
     async def _connect_once(self) -> None:
         if BleakClient is None:
             raise LumaBleError("Bleak is required: install `bleak` in the bridge environment")
-        devices = await discover(self.selector)
+        devices = await discover(self.selector, timeout=SCAN_WINDOW_S)
         device = choose_device(devices, self.selector)
         client = BleakClient(device, timeout=CONNECT_SECONDS, disconnected_callback=self._on_disconnect)
         await asyncio.wait_for(client.connect(), timeout=CONNECT_SECONDS)
@@ -213,8 +221,20 @@ class LumaSession:
     # ---- commands -----------------------------------------------------------
 
     async def wait_connected(self, timeout: float = 60.0) -> None:
-        """Block until the link is up, or raise once *timeout* passes."""
-        await asyncio.wait_for(self._connected.wait(), timeout=timeout)
+        """Block until the link is up, or raise `LumaBleError` once *timeout* passes.
+
+        Measured on E06-0055: once a session ends the glasses stop advertising
+        entirely and only reappear some ten minutes later, so a timeout here
+        usually means "wait and try again", not "wrong device".
+        """
+        try:
+            await asyncio.wait_for(self._connected.wait(), timeout=timeout)
+        except asyncio.TimeoutError as exc:
+            raise LumaBleError(
+                f"glasses did not come up within {timeout:.0f}s; they stop advertising "
+                "for several minutes after a session ends, so retry rather than "
+                "assuming the address is wrong"
+            ) from exc
 
     async def write(self, opcode: int, payload: bytes = b"") -> None:
         """Send one command frame on the live link."""
@@ -276,6 +296,11 @@ async def _listen(args: argparse.Namespace) -> int:
         print(f"Done. images={session.images_received} control_frames={len(session.control_frames)} "
               f"reconnects={session.reconnects}", flush=True)
         return 0
+    except LumaBleError as error:
+        # A missing link is an ordinary outcome here, not a crash: report it as
+        # one line and a non-zero exit instead of an asyncio traceback.
+        logger.error("%s", error)
+        return 1
     finally:
         await session.stop()
         task.cancel()
@@ -305,6 +330,9 @@ async def _capture(args: argparse.Namespace) -> int:
             if index + 1 < args.count:
                 await asyncio.sleep(args.interval)
         return 0
+    except LumaBleError as error:
+        logger.error("%s", error)
+        return 1
     finally:
         await session.stop()
         task.cancel()

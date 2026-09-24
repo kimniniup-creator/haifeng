@@ -26,6 +26,17 @@ EMOTIONS_DATASET = "pollen-robotics/reachy-mini-emotions-library"
 MAX_EDGE = 768
 JPEG_QUALITY = 78
 
+# A frame too dark or too smeared to hold a scene. The model cannot be relied on
+# to disown one: shown a black, motion-blurred capture it answered confidence
+# 0.97 - confident that the view *was* "very dark and heavily motion-blurred",
+# which is an honest reading of the pixels and a useless basis for a reaction.
+# So judge the frame here, where it is measurable, and cap the confidence.
+# Measured on this hardware: readable frames ran mean 44-72 with Laplacian
+# variance 60-230; the unreadable one was mean 22 with variance 12.
+MIN_BRIGHTNESS = 30.0
+MIN_SHARPNESS = 25.0
+UNREADABLE_CONFIDENCE = 0.0
+
 EMOTIONS = (
     "joy", "affection", "surprise", "curiosity",
     "sadness", "fear", "anger", "neutral",
@@ -123,6 +134,32 @@ def shrink(image: bytes) -> bytes:
         return image
 
 
+def readable(image: bytes) -> tuple[bool, str]:
+    """Whether the frame carries enough light and detail to be worth reading.
+
+    Returns (ok, reason). Without cv2 nothing can be measured, so say yes and
+    let the model decide rather than silently muting every reaction.
+    """
+    try:
+        import cv2
+        import numpy as np
+
+        frame = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+        if frame is None:
+            return False, "frame did not decode"
+        grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        brightness = float(grey.mean())
+        sharpness = float(cv2.Laplacian(grey, cv2.CV_64F).var())
+        if brightness < MIN_BRIGHTNESS:
+            return False, f"too dark (mean {brightness:.0f} < {MIN_BRIGHTNESS:.0f})"
+        if sharpness < MIN_SHARPNESS:
+            return False, f"too blurred (variance {sharpness:.0f} < {MIN_SHARPNESS:.0f})"
+        return True, f"mean {brightness:.0f}, variance {sharpness:.0f}"
+    except Exception as error:
+        logger.debug("frame quality not measurable: %s", error)
+        return True, "not measured"
+
+
 def analyse(image: bytes, model: str | None = None, timeout: float = 90.0) -> Dict[str, Any]:
     """Ask the vision model how the robot should react to this photo."""
     payload = shrink(image)
@@ -146,7 +183,17 @@ def analyse(image: bytes, model: str | None = None, timeout: float = 90.0) -> Di
         max_tokens=300,
     )
     text = (response.choices[0].message.content or "").strip()
-    return _parse(text)
+    reading = _parse(text)
+
+    # Cap rather than replace: the model's own words are still worth keeping in
+    # the log, and every other key stays exactly as the caller expects it.
+    ok, reason = readable(payload)
+    if not ok and reading["confidence"] > UNREADABLE_CONFIDENCE:
+        logger.info("unreadable frame (%s); confidence %.2f -> %.2f",
+                    reason, reading["confidence"], UNREADABLE_CONFIDENCE)
+        reading["confidence"] = UNREADABLE_CONFIDENCE
+        reading["quality"] = reason
+    return reading
 
 
 def _parse(text: str) -> Dict[str, Any]:
@@ -209,6 +256,11 @@ def play(move: str, with_sound: bool = True, timeout: float = 15.0) -> Dict[str,
 
     if with_sound:
         sound = _sound_path(move)
+        # The daemon answers 200 {"status":"ok"} even for a path that does not
+        # exist, so the status alone never shows whether anything was audible.
+        # Record the file that was actually sent; a silent move is then one
+        # lookup away from an answer instead of a guess.
+        result["sound_file"] = str(sound) if sound is not None else None
         if sound is not None:
             result["sound"] = _post(
                 "/api/media/play_sound", {"file": str(sound)}, timeout=timeout

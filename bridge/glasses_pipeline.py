@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 from bridge.scene_agent import react
+from bridge.luma_ble import LumaBleError
 from bridge.luma_daemon import LumaSession
 from bridge.m5_link import M5Link
 from bridge.m5_motion import ReachyMirror
@@ -139,6 +140,9 @@ async def _run(args: argparse.Namespace) -> int:
                 await asyncio.sleep(1.0)
     except (KeyboardInterrupt, asyncio.CancelledError):
         return 0
+    except LumaBleError as error:
+        logger.error("%s", error)
+        return 1
     finally:
         await _shutdown(session, task)
 
@@ -159,6 +163,11 @@ async def _once(args: argparse.Namespace) -> int:
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=1), flush=True)
         return 0
+    except LumaBleError as error:
+        # The glasses go off the air for minutes after a session; say so plainly
+        # rather than ending the run in an asyncio traceback.
+        logger.error("%s", error)
+        return 1
     finally:
         await _shutdown(session, task)
 

@@ -349,3 +349,14 @@ and were deliberately not restarted here.
 - M5 固件（SHA256 1ae7e659…3bcc）发 m5_motion：摇晃按主轴区分（左右 x→Reachy 摇头 yaw，上下 y→点头 pitch，扭转 z→roll 晃），侧倾停稳 600ms 发 tilt 左/右。bridge/m5_motion.py 用 daemon goto 串成衰减三摆（运行中 daemon 会忽略对话应用的 set_target，不打架），侧倾对应一次好奇歪头；M5_TILT_SIGN 可翻转方向。
 - 实测（USB 注入手势，事件标 injected）：摇头 yaw −7°…+17°，点头 pitch +0.5°…+17.6°，roll −9.6°…+12.6°，右倾 roll 到 −19° 后回正。真人实摇的轴向判定与侧倾方向待 Kim 手测。
 - glasses_pipeline run 默认同时开启镜像（--no-m5-motion 关闭），因为 M5 串口只能被一个进程占用。
+
+## 2026-09-24 自建本地 realtime 服务端，语音链路脱离 HuggingFace
+- **托管中转的真正瓶颈**：`/health` 暴露 `router.max_sessions=2`，每次 `/session` 分配一个槽位且**不随进程退出释放**，会话 token 有效期 7 天。今天重启十余次后两个账号的槽位均被占满，此后分配仍返 200 但路由器无空位，表现为"聋"。换 token 有效是因为不同账号分到不同计算端点（rwfuysa3mfhr1x5o → o98ikua91byuw3bo）。同时确认其 STT 为 parakeet-tdt，不支持普通话。
+- 新增 realtime_server/server.py：在本机实现该协议的必要子集（客户端 5 种消息、服务端 10 个事件）。链路为 麦克风 → Silero VAD(onnxruntime) → faster-whisper → OpenAI 兼容 chat 模型 → Piper TTS → 16kHz PCM 回传。纯 CPU，无 torch。应用通过 `backend.config` RPC 切到 `hf_mode=local` + `ws://127.0.0.1:8765/v1/realtime`。
+- 实测各段：VAD 142/225 块判语音且静音判否；STT base.en 1.16s / small.en 3.62s（同一素材识别结果一致，故选 base.en）；LLM gpt-5.5 1.4s、gpt-5.6-sol 2.3s、sol-openai-compact 13.1s（弃用）；工具调用正确（好消息触发 play_emotion(intent=happy)）。
+- **端到端 3/3**（托管中转为 2/15）："What is 2 plus 3?" → "2 plus 3 is 5…"；"How many legs does a spider have?" → "A spider has 8 legs."
+- **修正自己的测试方法缺陷**：conversation_probe 走门控注入通道，绕过了麦克风声学路径，因此"3/3"不代表用户真说话可用。用户反馈仍不理她后定位到：会场噪声使 VAD 持续判定语音，一轮憋到 30 秒上限才切。已把近场判据（响度相对房间底噪 ×2.2，仅用非语音块学习地板）移入服务端分段逻辑，音频仍全量流过；上限降至 15 秒。之后实测 6.9s/13.6s 正常收尾并产生回复。
+- 门控 voice_gate 在本地服务端下不再需要（无配额可省、服务端自带 VAD），已置 REACHY_WAKE_ENABLED=0 / REACHY_NEAR_ENABLED=0 全量放行。
+- TTS 根因（子线程交付 realtime_server/tts.py）：piper 的 espeak-ng 数据实际已随包安装，但**项目路径含中文"海风"**，espeak-ng 以窄字节路径打开失败并回退到编译期路径，报出误导性的 `D:/a/piper1-gpl/...`。解法为把数据镜像到 ASCII 路径再传入。每句合成 0.125–0.164s，STT 回转逐字一致。
+- 服务端配置读项目根 .env（非 conversation/.env）：REACHY_STT_MODEL / REACHY_STT_LANGUAGE / REACHY_VAD_SERVER_THRESHOLD / REACHY_CHAT_MODEL。
+- 新增 tools/dance_keeper.py：仅在 `/api/move/running` 为空且电机 enabled 时插入舞蹈，8–20 秒随机间隔、避免重复最近 4 个，不与对话和情绪动作争用。
