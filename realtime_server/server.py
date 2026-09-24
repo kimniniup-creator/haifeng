@@ -39,14 +39,22 @@ logger = logging.getLogger("realtime")
 RATE = 16000                 # the app sends and expects 16 kHz mono PCM16
 CHUNK = 512                  # Silero VAD window at 16 kHz
 SPEECH_START_CHUNKS = 3      # ~96 ms of speech before a turn is declared
-SILENCE_END_MS = 700         # pause that ends a turn
+SILENCE_END_MS = 500         # pause that ends a turn
 MIN_UTTERANCE_MS = 400       # ignore coughs and door slams
-MAX_UTTERANCE_S = 15
+# Cutting the robot off is only welcome while it is actually talking, and only
+# for sustained speech: room noise otherwise cancels every reply before it is
+# even spoken, which looks exactly like being ignored.
+# Its own voice leaks back through the microphone, so a short burst is not proof
+# anyone interrupted. Demand a full second of sustained speech.
+BARGE_IN_CHUNKS = 31         # ~1 s of speech
+# How long a silence before the robot says something of its own accord.
+IDLE_PROMPT_S = float(_ENV_IDLE) if (_ENV_IDLE := os.getenv("REACHY_IDLE_PROMPT_S")) else 45.0
+MAX_UTTERANCE_S = 8
 # A busy room keeps Silero saying "speech" forever, so a turn never ends and the
 # whole utterance is one useless 30 s block. The person addressing a desk robot
 # is far louder than the room behind them, so loudness against the room's own
 # floor decides what counts as speech aimed at us.
-NEAR_RATIO = 2.2
+NEAR_RATIO = 2.6
 NEAR_FLOOR_MIN = 150.0
 
 
@@ -154,6 +162,9 @@ class Session:
         self._speech_run = 0
         self._silence_ms = 0
         self._busy = False
+        self._talking = False
+        self._last_exchange = time.time()
+        self._reply_task: Optional[asyncio.Task] = None
         self._counter = 0
         self._floor = 0.0
         self._rms_history: List[float] = []
@@ -197,9 +208,18 @@ class Session:
 
         elif kind == "conversation.item.create":
             item = event.get("item") or {}
-            text = _text_of(item)
-            if text:
-                self.history.append({"role": item.get("role", "user"), "content": text})
+            if item.get("type") == "function_call_output":
+                # The app ran a tool for us. Feed the outcome back as context so
+                # the next reply can mention it, without implementing the full
+                # tool-call round trip.
+                self.history.append(
+                    {"role": "user", "content": f"(tool result: {item.get('output', '')})"}
+                )
+                return
+            content = _content_of(item)
+            if content:
+                self.history.append({"role": item.get("role", "user"), "content": content})
+                self._forget_old_images()
 
         elif kind == "response.create":
             if not self._busy:
@@ -207,8 +227,6 @@ class Session:
 
     async def _audio(self, pcm: np.ndarray) -> None:
         """Accumulate microphone audio and decide where turns begin and end."""
-        if self._busy:
-            return
         self._pending = np.concatenate([self._pending, pcm])
         ms_per_chunk = CHUNK * 1000 // RATE
 
@@ -231,7 +249,11 @@ class Session:
 
             if not self._speaking:
                 self._speech_run = self._speech_run + 1 if is_speech else 0
-                if self._speech_run >= SPEECH_START_CHUNKS:
+                if self._talking and self._speech_run >= BARGE_IN_CHUNKS:
+                    # Talking over the robot cuts it off, the way a person would
+                    # stop mid-sentence when interrupted.
+                    self._interrupt()
+                if self._speech_run >= SPEECH_START_CHUNKS and not self._busy:
                     self._speaking = True
                     self._silence_ms = 0
                     self._utterance = [chunk]
@@ -251,7 +273,55 @@ class Session:
                 await self.send("input_audio_buffer.speech_stopped")
                 if spoken_ms >= MIN_UTTERANCE_MS:
                     self._busy = True
-                    asyncio.create_task(self._turn(utterance))
+                    self._reply_task = asyncio.create_task(self._turn(utterance))
+
+    async def idle_loop(self) -> None:
+        """Break a long silence the way a companion would, unprompted."""
+        while True:
+            await asyncio.sleep(5.0)
+            if IDLE_PROMPT_S <= 0 or self._busy or self._talking or self._speaking:
+                continue
+            if time.time() - self._last_exchange < IDLE_PROMPT_S:
+                continue
+            # Marked before the reply so a slow model cannot fire twice.
+            self._last_exchange = time.time()
+            self._busy = True
+            self.history.append({
+                "role": "user",
+                "content": "(nobody has said anything for a while. Say one short "
+                           "line of your own: notice something, wonder aloud, or "
+                           "ask what they are up to. Do not mention this prompt.)",
+            })
+            try:
+                self._reply_task = asyncio.create_task(self._respond(None))
+                await self._reply_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.exception("idle line failed")
+            finally:
+                self._busy = False
+
+    def _forget_old_images(self) -> None:
+        """Keep only the newest picture: old frames are stale and expensive."""
+        seen = False
+        for entry in reversed(self.history):
+            content = entry.get("content")
+            if not isinstance(content, list):
+                continue
+            if any(part.get("type") == "image_url" for part in content):
+                if seen:
+                    entry["content"] = "(an earlier picture, no longer shown)"
+                seen = True
+
+    def _interrupt(self) -> None:
+        """Abandon whatever the robot was saying, mid-sentence."""
+        task = self._reply_task
+        if task is not None and not task.done():
+            task.cancel()
+            logger.info("interrupted by the user")
+        self._talking = False
+        self._busy = False
 
     # ---- one turn ---------------------------------------------------------
 
@@ -282,6 +352,17 @@ class Session:
         reply, call = await asyncio.to_thread(self.brains.chat, self.instructions,
                                               self.history[-20:], self.tools)
 
+        # A tool call with no text leaves the robot moving but mute. Ask again
+        # without tools so there is always something to say: upstream would
+        # have run the tool and then requested a follow-up response, which this
+        # server does not implement.
+        if not reply:
+            reply, _ = await asyncio.to_thread(
+                self.brains.chat,
+                self.instructions + "\nAnswer in words. Do not call a tool.",
+                self.history[-20:], [],
+            )
+
         if call is not None:
             await self.send(
                 "response.function_call_arguments.done",
@@ -297,29 +378,61 @@ class Session:
                             response_id=response_id, transcript=reply)
             voice = self.brains.tts
             if voice is not None:
-                audio = await asyncio.to_thread(voice.speak, reply)
-                # 200 ms slices keep playback smooth without flooding the socket.
-                step = RATE // 5
-                for start in range(0, audio.size, step):
-                    piece = audio[start:start + step]
-                    await self.send("response.output_audio.delta", response_id=response_id,
-                                    delta=base64.b64encode(piece.tobytes()).decode())
-                    await asyncio.sleep(0)
+                # Synthesise sentence by sentence so the first words leave before
+                # the last ones exist; a long reply then starts just as quickly.
+                self._talking = True
+                for sentence in _sentences(reply):
+                    audio = await asyncio.to_thread(voice.speak, sentence)
+                    step = RATE // 5
+                    for start in range(0, audio.size, step):
+                        piece = audio[start:start + step]
+                        await self.send("response.output_audio.delta", response_id=response_id,
+                                        delta=base64.b64encode(piece.tobytes()).decode())
+                        await asyncio.sleep(0)
+                self._talking = False
                 await self.send("response.output_audio.done", response_id=response_id)
 
+        self._talking = False
+        self._last_exchange = time.time()
         await self.send("response.done",
                         response={"id": response_id, "status": "completed", "output": []})
 
 
-def _text_of(item: Dict[str, Any]) -> str:
-    parts = item.get("content") or []
+def _content_of(item: Dict[str, Any]) -> Any:
+    """Turn one conversation item into chat-completions content.
+
+    Pictures arrive as their own item with an `input_image` part, so they have
+    to survive as a content block rather than being flattened to text.
+    """
+    parts = item.get("content")
     if isinstance(parts, str):
         return parts
-    out = []
+    if not isinstance(parts, list):
+        return ""
+
+    blocks: List[Dict[str, Any]] = []
+    text_only: List[str] = []
     for part in parts:
-        if isinstance(part, dict):
-            out.append(part.get("text") or part.get("transcript") or "")
-    return " ".join(p for p in out if p).strip()
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") == "input_image" and part.get("image_url"):
+            blocks.append({"type": "image_url", "image_url": {"url": part["image_url"]}})
+        else:
+            said = part.get("text") or part.get("transcript") or ""
+            if said:
+                text_only.append(said)
+                blocks.append({"type": "text", "text": said})
+    if blocks and any(b["type"] == "image_url" for b in blocks):
+        return blocks
+    return " ".join(text_only).strip()
+
+
+def _sentences(text: str) -> List[str]:
+    """Split a reply where a speaker would breathe."""
+    import re
+
+    parts = [p.strip() for p in re.split(r"(?<=[.!?—])\s+", text) if p.strip()]
+    return parts or [text]
 
 
 # --------------------------------------------------------------------------- #
@@ -343,7 +456,8 @@ class Brains:
             raise RuntimeError("SCENE_API_KEY and SCENE_API_URL must be set")
         self.client = OpenAI(api_key=key, base_url=url.rstrip("/") + "/v1")
         self.model = _env("REACHY_CHAT_MODEL", "gpt-5.5")
-        logger.info("chat model: %s", self.model)
+        self.vision_model = _env("REACHY_VISION_MODEL", "gpt-5.6-sol")
+        logger.info("chat model: %s (vision: %s)", self.model, self.vision_model)
 
     @property
     def tts(self) -> Optional[Tts]:
@@ -360,7 +474,14 @@ class Brains:
              tools: List[Dict[str, Any]]) -> tuple[str, Optional[Dict[str, Any]]]:
         """One completion. Returns (spoken text, tool call or None)."""
         messages = [{"role": "system", "content": instructions}] + history
-        request: Dict[str, Any] = {"model": self.model, "messages": messages, "max_tokens": 200}
+        # The fast chat model cannot see; switch only when a picture is in play.
+        has_image = any(
+            isinstance(m.get("content"), list)
+            and any(p.get("type") == "image_url" for p in m["content"])
+            for m in history
+        )
+        model = self.vision_model if has_image else self.model
+        request: Dict[str, Any] = {"model": model, "messages": messages, "max_tokens": 200}
         usable = [_as_chat_tool(t) for t in tools]
         usable = [t for t in usable if t]
         if usable:
@@ -404,12 +525,14 @@ async def serve(host: str, port: int) -> None:
         logger.info("client connected: %s", peer)
         session = Session(socket, brains)
         await session.send("session.created", session={"id": session._id("sess")})
+        idle = asyncio.create_task(session.idle_loop())
         try:
             async for message in socket:
                 await session.handle(message)
         except websockets.ConnectionClosed:
             pass
         finally:
+            idle.cancel()
             logger.info("client gone: %s", peer)
 
     async with websockets.serve(handler, host, port, max_size=None, ping_interval=20):

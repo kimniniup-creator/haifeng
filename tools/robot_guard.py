@@ -164,7 +164,50 @@ def recover(status: dict[str, Any], path: Path, wait: float) -> bool:
         and backend.get("motor_control_mode") == "enabled"
     )
     log(f"  after {time.time() - began:.1f}s: {describe(after)}", path)
+    if healthy:
+        restart_conversation(path)
     return healthy
+
+
+def restart_conversation(path: Path) -> None:
+    """Restart the conversation app so it re-attaches to the revived daemon.
+
+    Reviving the daemon is not enough on its own: the app's SDK link does not
+    reconnect, it just logs "Lost connection with the server" forever - and its
+    microphone pipeline hangs off that link, so the robot stops hearing anyone.
+    Only restart when the app is actually up; if it is not running, leave it be.
+    """
+    import subprocess
+
+    pid_file = ROOT / ".runtime" / "conversation.pid"
+    launcher = ROOT / "start_conversation.ps1"
+    if not launcher.exists():
+        return
+    try:
+        pid = int(pid_file.read_text().strip())
+    except (OSError, ValueError):
+        log("  conversation app not running; leaving it alone", path)
+        return
+
+    log(f"  restarting the conversation app (pid {pid}) so it re-attaches", path)
+    try:
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             f"Stop-Process -Id {pid} -Force -ErrorAction SilentlyContinue"],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30,
+        )
+        time.sleep(3)
+        # Never capture the launcher's output: its detached child inherits the
+        # pipe, so communicate() would wait for an EOF that never arrives.
+        subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(launcher)],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=90,
+        )
+        log("  conversation app relaunched", path)
+    except subprocess.TimeoutExpired:
+        log("  launcher still holding the console; assuming it started", path)
+    except Exception as error:
+        log(f"  could not relaunch the conversation app: {error}", path)
 
 
 def _tick(args: argparse.Namespace, last_attempt: float, backoff: float) -> tuple[float, float]:
