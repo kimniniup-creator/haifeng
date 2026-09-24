@@ -299,3 +299,12 @@ and were deliberately not restarted here.
 - 离线验证：2 秒环境噪声 0/50 帧放行；预滚封顶 1 秒；强制开启按时自动关闭；唤醒后放行 16640 样本（预滚 16000 + 当前帧 640）。接入后实测会话正常初始化，未说唤醒词时用户发言条数为 0（此前同等时间会产生大量乱码转写）。
 - patches/conversation_vad 已并入 patches/conversation_tuning，现含四项：VAD 参数、客户端打断开关、唤醒门控钩子、呼吸动画幅度。修掉两处补丁自身缺陷（`_os` 导入锚点、`from __future__` 必须置顶）。
 - 仍待做（调研建议 1/2）：在客户端对 `speech_stopped` 后 10 秒无 `response.created` 做进程内重连并回放上下文，替代当前的日志看门狗进程重启；WebSocket 加 ping_interval。
+
+## 2026-09-24 近场门控（免唤醒词）
+- 用户反馈唤醒词方案不好用：它打完招呼后说话就被门控全挡，而 `hey bb` 这个词 openWakeWord 无现成模型。
+- 在 wake_gate 增加近场开门：桌面机器人前说话的人比身后整个会场响得多，用"响度相对房间自身底噪的倍数"作为"这句是对我说的"线索，无需任何口令；唤醒词保留给远距离场景。
+- 判据必须同时满足人声与响度：silero VAD 判定为语音，且 RMS ≥ 噪声地板 × 倍数（默认 3.0）。地板取最近约 30 秒 RMS 的 20 分位，且**只用非语音块学习**，否则一段长发言会把门槛抬到再也过不去。
+- 离线验证（VAD 打桩以单独测响度逻辑）：底噪期放行 0 帧、地板 588；远处人声 2.9 倍 → 放行 0；近距离人声 6.8 倍 → 开门、放行 25 帧；地板未被人声污染仍为 588。白噪声测试不开门属正确行为（VAD 判定非语音）。
+- 实机验证：`near-field speech (score 0.00, rms 1506 vs floor 142); opening uplink`，未说唤醒词即开门。
+- 可调：REACHY_NEAR_ENABLED / REACHY_NEAR_RATIO / REACHY_NEAR_FLOOR_MIN。
+- 澄清用户疑问：9527 中转的 sk- key 仅用于眼镜视觉链路（gpt-5.6-sol，已跑通）；语音链路用的是本机既有 HF token 指向的 pollen-robotics-reachy-mini-realtime-url.hf.space，两者无关。语音无法改用该中转，因其无 realtime 模型且握手失败，已实测。

@@ -57,6 +57,13 @@ class WakeGate:
         ]
         self.threshold = _env_float("REACHY_WAKE_THRESHOLD", 0.5)
         self.vad_threshold = _env_float("REACHY_WAKE_VAD_THRESHOLD", 0.5)
+        # Near-field opener: someone leaning in to talk to a desk robot is much
+        # louder than the room behind them, so loudness relative to the room's
+        # own floor is a usable "this one is talking to me" cue - and it needs no
+        # magic phrase. The wake word stays available for talking from further off.
+        self.near_enabled = _flag("REACHY_NEAR_ENABLED", True)
+        self.near_ratio = _env_float("REACHY_NEAR_RATIO", 3.0)
+        self.near_floor_min = _env_float("REACHY_NEAR_FLOOR_MIN", 120.0)
         # How long the gate stays open after the last speech is heard.
         self.hold_s = _env_float("REACHY_WAKE_HOLD_S", 8.0)
         self.preroll_s = _env_float("REACHY_WAKE_PREROLL_S", 1.0)
@@ -73,9 +80,13 @@ class WakeGate:
         self._forced_until = 0.0
 
         self.wakes = 0
+        self.near_opens = 0
         self.frames_passed = 0
         self.frames_dropped = 0
         self.last_score = 0.0
+        self.last_rms = 0.0
+        self.noise_floor = 0.0
+        self._rms_history: deque[float] = deque(maxlen=375)  # ~30 s of 80 ms chunks
         self.error: Optional[str] = None
 
     # ---- lifecycle ----------------------------------------------------------
@@ -130,9 +141,13 @@ class WakeGate:
             "wake_models": self.models,
             "threshold": self.threshold,
             "wakes": self.wakes,
+            "near_opens": self.near_opens,
+            "near_enabled": self.near_enabled,
             "frames_passed": self.frames_passed,
             "frames_dropped": self.frames_dropped,
             "last_score": round(self.last_score, 3),
+            "last_rms": round(self.last_rms, 1),
+            "noise_floor": round(self.noise_floor, 1),
             "error": self.error,
         }
 
@@ -162,13 +177,21 @@ class WakeGate:
                 self.frames_passed += 1
                 return frame
 
-            if self._woke:
+            if self._woke or self._near:
+                reason = "wake word" if self._woke else "near-field speech"
+                if self._woke:
+                    self.wakes += 1
+                else:
+                    self.near_opens += 1
                 self._woke = False
+                self._near = False
                 self._open_until = now + self.hold_s
-                self.wakes += 1
                 flushed = self._drain_preroll()
                 self.frames_passed += 1
-                logger.info("wake word heard (score %.2f); opening uplink", self.last_score)
+                logger.info(
+                    "%s (score %.2f, rms %.0f vs floor %.0f); opening uplink",
+                    reason, self.last_score, self.last_rms, self.noise_floor,
+                )
                 return np.concatenate([flushed, frame]) if flushed.size else frame
 
             self._remember(frame)
@@ -178,6 +201,17 @@ class WakeGate:
     # ---- internals -----------------------------------------------------------
 
     _woke = False
+    _near = False
+
+    def _update_floor(self, rms: float) -> None:
+        """Track the room's own level as a low percentile of recent loudness."""
+        self._rms_history.append(rms)
+        if len(self._rms_history) >= 25:
+            ordered = sorted(self._rms_history)
+            self.noise_floor = max(
+                ordered[len(ordered) // 5],  # 20th percentile
+                self.near_floor_min,
+            )
 
     def _score(self, frame: np.ndarray) -> bool:
         """Run detection over whole chunks; return whether this frame held speech."""
@@ -193,8 +227,19 @@ class WakeGate:
                 return True
             best = max(scores.values()) if scores else 0.0
             self.last_score = best
-            if speech_probability >= self.vad_threshold:
+            is_speech = speech_probability >= self.vad_threshold
+            if is_speech:
                 heard_speech = True
+
+            rms = float(np.sqrt(np.mean(chunk.astype(np.float32) ** 2)))
+            self.last_rms = rms
+            # Only quiet chunks teach the floor, or a long speech burst would
+            # raise the bar until nothing can clear it.
+            if not is_speech:
+                self._update_floor(rms)
+            elif self.near_enabled and self.noise_floor > 0:
+                if rms >= self.noise_floor * self.near_ratio:
+                    self._near = True
             # Silero gates the wake word too: a spike with no speech is noise.
             if (
                 best >= self.threshold
