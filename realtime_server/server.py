@@ -137,10 +137,15 @@ class Stt:
         """Load the model named by REACHY_STT_MODEL."""
         from faster_whisper import WhisperModel
 
-        name = _env("REACHY_STT_MODEL", "small.en")
+        name = _env("REACHY_STT_MODEL", "tiny.en")
         self.language = _env("REACHY_STT_LANGUAGE", "en") or None
-        self._model = WhisperModel(name, device="cpu", compute_type="int8")
-        logger.info("stt ready: %s (%s)", name, self.language or "auto")
+        # The robot daemon keeps the camera and control loop busy, so leaving
+        # the thread count to chance means transcription waits behind it.
+        threads = int(_env_float("REACHY_STT_THREADS", 8))
+        self._model = WhisperModel(
+            name, device="cpu", compute_type="int8", cpu_threads=threads,
+        )
+        logger.info("stt ready: %s (%s, %d threads)", name, self.language or "auto", threads)
 
     def transcribe(self, pcm: np.ndarray) -> str:
         """Return the text of one utterance."""
@@ -374,8 +379,10 @@ class Session:
         response_id = self._id("resp")
         await self.send("response.created", response={"id": response_id, "status": "in_progress"})
 
+        began = time.time()
         reply, call = await asyncio.to_thread(self.brains.chat, self.instructions,
-                                              self.history[-20:], self.tools)
+                                              self.history[-10:], self.tools)
+        first_call = time.time() - began
 
         # A tool call with no text leaves the robot moving but mute. Ask again
         # without tools so there is always something to say: upstream would
@@ -405,6 +412,7 @@ class Session:
             if voice is not None:
                 # Synthesise sentence by sentence so the first words leave before
                 # the last ones exist; a long reply then starts just as quickly.
+                spoke = time.time()
                 self._talking = True
                 for sentence in _sentences(reply):
                     audio = await asyncio.to_thread(voice.speak, sentence)
@@ -415,6 +423,7 @@ class Session:
                                         delta=base64.b64encode(piece.tobytes()).decode())
                         await asyncio.sleep(0)
                 self._talking = False
+                logger.info("timing: model %.1fs  speech %.1fs", first_call, time.time() - spoke)
                 await self.send("response.output_audio.done", response_id=response_id)
 
         self._talking = False
@@ -479,7 +488,14 @@ class Brains:
         url = os.getenv("SCENE_API_URL")
         if not key or not url:
             raise RuntimeError("SCENE_API_KEY and SCENE_API_URL must be set")
-        self.client = OpenAI(api_key=key, base_url=url.rstrip("/") + "/v1")
+        # The relay answers in ~3 s but hangs outright about one call in ten.
+        # Waiting 30 s for those is what makes the robot look like it ignored
+        # you, so give up early and let the retry catch it.
+        self.client = OpenAI(
+            api_key=key, base_url=url.rstrip("/") + "/v1",
+            timeout=_env_float("REACHY_CHAT_TIMEOUT_S", 8.0),
+            max_retries=int(_env_float("REACHY_CHAT_RETRIES", 1)),
+        )
         self.model = _env("REACHY_CHAT_MODEL", "gpt-5.5")
         self.vision_model = _env("REACHY_VISION_MODEL", "gpt-5.6-sol")
         logger.info("chat model: %s (vision: %s)", self.model, self.vision_model)
@@ -512,7 +528,7 @@ class Brains:
         if usable:
             request["tools"] = usable
         try:
-            completion = self.client.with_options(timeout=30).chat.completions.create(**request)
+            completion = self.client.chat.completions.create(**request)
         except Exception as error:
             logger.warning("chat failed: %s", error)
             return "Sorry, I lost that thought.", None
